@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(terraform fmt:*)",
+      "Bash(terraform validate:*)",
+      "Bash(terraform plan:*)",
+      "Bash(terraform init:*)",
+      "Bash(terraform -chdir=infra fmt:*)",
+      "Bash(terraform -chdir=infra validate:*)",
+      "Bash(terraform -chdir=infra plan:*)",
+      "Bash(terraform -chdir=infra init:*)",
+      "Bash(tflint:*)",
+      "Bash(checkov:*)",
+      "Bash(pytest:*)"
+    ],
+    "deny": [
+      "Bash(terraform apply:*)",
+      "Bash(terraform destroy:*)",
+      "Bash(terraform -chdir=infra apply:*)",
+      "Bash(terraform -chdir=infra destroy:*)",
+      "Read(./**/*.tfstate)",
+      "Read(./**/*.tfvars.secret)",
+      "Read(./.env)"
+    ]
+  }
+}

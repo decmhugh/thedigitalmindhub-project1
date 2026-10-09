@@ -1,0 +1,13 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
+*.tfvars.secret
+.env
+build/
+__pycache__/
+.pytest_cache/
+.venv/
+CLAUDE.local.md
+.claude/settings.local.json
