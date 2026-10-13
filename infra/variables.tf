@@ -33,9 +33,3 @@ variable "agent_runtime_environment" {
   default     = {}
   description = "Environment variables passed to the AgentCore runtime container."
 }
-
-variable "cognito_user_pool_client_id" {
-  type        = string
-  default     = ""
-  description = "Cognito app client ID used by the demo page sign-in form."
-}

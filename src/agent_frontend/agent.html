@@ -45,21 +45,12 @@
     .rail { display: flex; flex-direction: column; padding: 28px; border-right: 1px solid var(--line); background: #f8fbf9; }
     h1 { margin: 0; font-family: Georgia, serif; font-size: 34px; font-weight: 400; line-height: 1.08; }
     .intro { margin: 12px 0 30px; color: var(--muted); font-size: 14px; line-height: 1.6; }
-    .section-label { margin: 0 0 12px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
-    .field { display: grid; gap: 7px; margin-bottom: 15px; }
-    .field label { font-size: 12px; font-weight: 650; }
-    .field input { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 7px; outline: none; background: white; color: var(--ink); }
-    .field input:focus, textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 89, 0.12); }
+    textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 89, 0.12); }
     .primary, .secondary { min-height: 42px; padding: 0 15px; border: 0; border-radius: 7px; font-size: 13px; font-weight: 700; }
     .primary { color: white; background: var(--green); }
     .primary:hover { background: var(--green-dark); }
     .secondary { color: var(--green-dark); background: #e4f0eb; }
     .secondary:hover { background: #d8eae2; }
-    .wide { width: 100%; }
-    .hint, .feedback { min-height: 18px; margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .feedback.is-error { color: #a63e32; }
-    .identity { display: none; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
-    .identity-name { overflow-wrap: anywhere; margin: 0 0 12px; font-size: 12px; color: var(--muted); }
     .chat { display: flex; min-width: 0; flex-direction: column; }
     .chat-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
     .chat-title { margin: 0; font-size: 14px; font-weight: 700; }
@@ -72,8 +63,6 @@
     .composer { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; padding: 16px 18px; border-top: 1px solid var(--line); }
     .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 140px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); }
     .composer .primary { min-width: 82px; }
-    .composer[aria-disabled="true"] { opacity: 0.55; }
-    .composer[aria-disabled="true"] textarea, .composer[aria-disabled="true"] button { pointer-events: none; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     @media (max-width: 720px) {
       .shell { width: min(100% - 20px, 560px); padding-top: 16px; }
@@ -82,13 +71,10 @@
       .rail { padding: 21px; border-right: 0; border-bottom: 1px solid var(--line); }
       h1 { font-size: 29px; }
       .intro { margin-bottom: 18px; }
-      .auth-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-      .field { margin-bottom: 10px; }
       .chat { min-height: 440px; }
       .message { max-width: 90%; }
     }
     @media (max-width: 420px) {
-      .auth-fields { grid-template-columns: 1fr; gap: 0; }
       .chat-head { padding: 16px; }
       #messages { padding: 18px 14px; }
       .composer { padding: 12px; }
@@ -106,32 +92,13 @@
           <p class="brand-kicker">Interactive demo</p>
         </div>
       </div>
-      <div class="status" aria-live="polite"><span id="status-dot" class="status-dot"></span><span id="status-label">Sign in to begin</span></div>
+      <div class="status" aria-live="polite"><span id="status-dot" class="status-dot is-online"></span><span id="status-label">Ready</span></div>
     </header>
 
     <main>
       <aside class="rail">
         <h1>Ask with<br>context.</h1>
-        <p class="intro">A private demo space for exploring the agent. Sign in to start a conversation.</p>
-        <form id="sign-in-form" autocomplete="on">
-          <p class="section-label">Demo sign in</p>
-          <div class="auth-fields">
-            <div class="field">
-              <label for="username">Username</label>
-              <input id="username" name="username" autocomplete="username" required>
-            </div>
-            <div class="field">
-              <label for="password">Password</label>
-              <input id="password" name="password" type="password" autocomplete="current-password" required>
-            </div>
-          </div>
-          <button id="sign-in-button" class="primary wide" type="submit">Sign in</button>
-          <p id="auth-feedback" class="feedback" role="status"></p>
-        </form>
-        <div id="identity" class="identity">
-          <p id="identity-name" class="identity-name"></p>
-          <button id="sign-out-button" class="secondary wide" type="button">Sign out</button>
-        </div>
+        <p class="intro">A demo space for exploring the agent. Type a message to start a conversation.</p>
       </aside>
 
       <section class="chat" aria-label="Agent conversation">
@@ -140,15 +107,15 @@
             <p class="chat-title">Conversation</p>
             <p id="session-label" class="session-label">New session</p>
           </div>
-          <button id="new-session-button" class="secondary" type="button" disabled>New session</button>
+          <button id="new-session-button" class="secondary" type="button">New session</button>
         </header>
         <div id="messages" aria-live="polite" aria-relevant="additions text">
           <p id="empty-state" class="empty-state">Your conversation will appear here.</p>
         </div>
-        <form id="prompt-form" class="composer" aria-disabled="true">
+        <form id="prompt-form" class="composer">
           <label class="sr-only" for="prompt">Message</label>
-          <textarea id="prompt" placeholder="Write a message…" rows="1" disabled required></textarea>
-          <button id="send-button" class="primary" type="submit" disabled>Send</button>
+          <textarea id="prompt" placeholder="Write a message…" rows="1" required></textarea>
+          <button id="send-button" class="primary" type="submit">Send</button>
         </form>
       </section>
     </main>
@@ -156,44 +123,9 @@
 
   <script>
     $(function () {
-      const agentConfig = {
-        region: "__AWS_REGION__",
-        clientId: "__COGNITO_USER_POOL_CLIENT_ID__"
-      };
-      let idToken = "";
-      let sessionId = "";
+      const emptyState = "Your conversation will appear here.";
+      let startNewSession = false;
       let isSending = false;
-
-      function setFeedback(message, isError) {
-        $("#auth-feedback").text(message).toggleClass("is-error", Boolean(isError));
-      }
-
-      function setSignedIn(token, username) {
-        idToken = token;
-        $("#sign-in-form").hide();
-        $("#identity").show();
-        $("#identity-name").text(username);
-        $("#status-label").text("Signed in");
-        $("#status-dot").addClass("is-online");
-        $("#prompt").prop("disabled", false).trigger("focus");
-        $("#send-button, #new-session-button").prop("disabled", false);
-        $("#prompt-form").attr("aria-disabled", "false");
-      }
-
-      function signOut() {
-        idToken = "";
-        sessionId = "";
-        $("#password").val("");
-        $("#identity").hide();
-        $("#sign-in-form").show();
-        $("#status-label").text("Sign in to begin");
-        $("#status-dot").removeClass("is-online");
-        $("#prompt").val("").prop("disabled", true);
-        $("#send-button, #new-session-button").prop("disabled", true);
-        $("#prompt-form").attr("aria-disabled", "true");
-        $("#messages").empty().append($("<p>").attr("id", "empty-state").addClass("empty-state").text("Your conversation will appear here."));
-        $("#session-label").text("New session");
-      }
 
       function addMessage(kind, text) {
         $("#empty-state").remove();
@@ -201,93 +133,36 @@
         $("#messages").append(message).scrollTop($("#messages")[0].scrollHeight);
       }
 
-      if (!agentConfig.clientId || agentConfig.clientId.indexOf("__") === 0) {
-        $("#sign-in-button").prop("disabled", true);
-        setFeedback("Cognito client is not configured for this deployment.", true);
-      }
-
-      $("#sign-in-form").on("submit", function (event) {
-        event.preventDefault();
-        const username = $("#username").val().trim();
-        const password = $("#password").val();
-        const cognitoUrl = "https://cognito-idp." + agentConfig.region + ".amazonaws.com/";
-        setFeedback("Signing in…", false);
-        $("#sign-in-button").prop("disabled", true);
-
-        $.ajax({
-          url: cognitoUrl,
-          method: "POST",
-          contentType: "application/x-amz-json-1.1",
-          headers: { "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth" },
-          data: JSON.stringify({
-            AuthFlow: "USER_AUTH",
-            ClientId: agentConfig.clientId,
-            AuthParameters: { USERNAME: username, PREFERRED_CHALLENGE: "PASSWORD" }
-          })
-        }).then(function (result) {
-          if (result.AuthenticationResult) return result;
-          if (result.ChallengeName !== "PASSWORD" || !result.Session) return result;
-          return $.ajax({
-            url: cognitoUrl,
-            method: "POST",
-            contentType: "application/x-amz-json-1.1",
-            headers: { "X-Amz-Target": "AWSCognitoIdentityProviderService.RespondToAuthChallenge" },
-            data: JSON.stringify({
-              ChallengeName: "PASSWORD",
-              ClientId: agentConfig.clientId,
-              Session: result.Session,
-              ChallengeResponses: { USERNAME: username, PASSWORD: password }
-            })
-          });
-        }).done(function (result) {
-          const authentication = result.AuthenticationResult;
-          if (!authentication || !authentication.IdToken) {
-            setFeedback("This account requires another sign-in step not supported by the demo.", true);
-            return;
-          }
-          setFeedback("", false);
-          setSignedIn(authentication.IdToken, username);
-        }).fail(function () {
-          setFeedback("Sign in failed. Check your credentials and try again.", true);
-        }).always(function () {
-          $("#password").val("");
-          $("#sign-in-button").prop("disabled", false);
-        });
-      });
-
-      $("#sign-out-button").on("click", signOut);
-
       $("#new-session-button").on("click", function () {
-        sessionId = "";
+        startNewSession = true;
         $("#session-label").text("New session");
-        $("#messages").empty().append($("<p>").attr("id", "empty-state").addClass("empty-state").text("Your conversation will appear here."));
+        $("#messages").empty().append($("<p>").attr("id", "empty-state").addClass("empty-state").text(emptyState));
         $("#prompt").trigger("focus");
       });
 
       $("#prompt-form").on("submit", function (event) {
         event.preventDefault();
         const prompt = $("#prompt").val().trim();
-        if (!prompt || !idToken || isSending) return;
+        if (!prompt || isSending) return;
         addMessage("user", prompt);
         $("#prompt").val("").trigger("focus");
         isSending = true;
         $("#send-button").prop("disabled", true).text("…");
         const payload = { prompt: prompt };
-        if (sessionId) payload.session_id = sessionId;
+        if (startNewSession) payload.new_session = true;
         $.ajax({
           url: "/agent/invoke",
           method: "POST",
           contentType: "application/json",
-          headers: { Authorization: "Bearer " + idToken },
           data: JSON.stringify(payload)
         }).done(function (result) {
-          sessionId = result.session_id;
-          $("#session-label").text("Session " + sessionId);
+          startNewSession = false;
+          $("#session-label").text("Session active");
           addMessage("agent", result.response);
         }).fail(function (xhr) {
-          const status = xhr.status;
-          const message = status === 401 ? "Your session expired. Please sign in again." : "The agent could not complete that request. Try again.";
-          if (status === 401) signOut();
+          const message = xhr.status === 429
+            ? "Too many requests. Please wait a moment and try again."
+            : "The agent could not complete that request. Try again.";
           addMessage("agent", message);
         }).always(function () {
           isSending = false;

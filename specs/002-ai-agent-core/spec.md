@@ -9,7 +9,7 @@ Provide a capable AI agent through a public demo API so users can test it withou
 ## User stories
 
 - As a demo user, I want to submit a prompt and get the agent's reply without signing in.
-- As a demo user, I want the agent to retain conversation context within the session I provide.
+- As a demo user, I want my browser to retain conversation context in a cookie for the current browsing session, without signing in.
 - As a user, I want the agent to call project tools, execute code, and browse the web when useful.
 - As an operator, I want safety filtering and operational telemetry while keeping prompt content out of logs.
 
@@ -33,28 +33,30 @@ Provide a capable AI agent through a public demo API so users can test it withou
 
 | Method | Path | Request | Success | Errors |
 | ------ | ---- | ------- | ------- | ------ |
-| POST | /agent/invoke | JSON `{"prompt": str, "session_id": str (optional, 33+ chars)}`; no authentication | 200 `{"response": str, "session_id": str}` | 400 invalid body; 422 blocked by guardrail; 429 throttled; 502 runtime failure; 504 timeout |
+| POST | /agent/invoke | JSON `{"prompt": str, "new_session": bool (optional)}`; no authentication; browser sends `agent_session` cookie automatically | 200 `{"response": str}`; first/new session response sets an `agent_session` cookie | 400 invalid body; 422 blocked by guardrail; 429 throttled; 502 runtime failure; 504 timeout |
 | AgentCore runtime endpoint | Internal invocation by Lambda using IAM | Agent payload | Runtime response | Not exposed as a public client route |
 
 ## Acceptance criteria
 
-- AC1: A valid anonymous request returns 200 with the agent's text and a session id.
-- AC2: A missing or empty `prompt`, invalid JSON, or invalid session id returns 400 without invoking the runtime.
+- AC1: A valid anonymous request returns 200 with the agent's text; it does not expose the session ID in the response body.
+- AC2: A missing or empty `prompt` or invalid JSON returns 400 without invoking the runtime.
 - AC3: A request without an Authorization header can invoke the API; the request is still subject to API Gateway throttling.
-- AC4: If `session_id` is omitted, one is generated and returned; if supplied, it is passed through unchanged.
-- AC5: The agent uses earlier turns within the same session; it does not retrieve or share personal memory across sessions.
-- AC6: The agent can call at least one project endpoint (`GET /hello`) as a Gateway tool and use its result.
-- AC7: The agent can execute code through Code Interpreter and browse a page through Browser, each only when the model requests it.
-- AC8: Input or output blocked by the guardrail returns 422 with a generic message; PII is masked in responses and logs.
-- AC9: Runtime errors map to 502 and timeouts to 504 with generic messages; no internal details leak.
-- AC10: API Gateway applies a rate limit of 2 requests per second and a burst limit of 5 to `POST /agent/invoke`; excess requests receive 429.
-- AC11: Each turn emits a trace with session id, tool calls, latency, and token counts; a dashboard and an error-rate alarm exist.
-- AC12: Runtime ARN, memory ID, Gateway URL, and guardrail ID come from configuration, never hardcoded.
+- AC4: On the first request, the Lambda generates an unpredictable session ID and returns it only in a cookie named `agent_session`; subsequent requests continue using that cookie.
+- AC5: The `agent_session` cookie is a browser-session cookie with `Path=/agent; Secure; HttpOnly; SameSite=Strict`, and has no `Expires` or `Max-Age` attribute.
+- AC6: A request with `new_session: true` creates a fresh session and rotates the `agent_session` cookie.
+- AC7: The agent uses earlier turns within the cookie's session; it does not retrieve or share personal memory across sessions.
+- AC8: The agent can call at least one project endpoint (`GET /hello`) as a Gateway tool and use its result.
+- AC9: The agent can execute code through Code Interpreter and browse a page through Browser, each only when the model requests it.
+- AC10: Input or output blocked by the guardrail returns 422 with a generic message; PII is masked in responses and logs.
+- AC11: Runtime errors map to 502 and timeouts to 504 with generic messages; no internal details leak.
+- AC12: API Gateway applies a rate limit of 2 requests per second and a burst limit of 5 to `POST /agent/invoke`; excess requests receive 429.
+- AC13: Each turn emits a trace with a non-secret correlation value, tool calls, latency, and token counts; raw cookies/session IDs are never logged.
+- AC14: Runtime ARN, memory ID, Gateway URL, and guardrail ID come from configuration, never hardcoded.
 
 ## Non-functional
 
 - Invoke Lambda: timeout 60 s, 256 MB. Agent turn budget: 55 s.
-- Prompts and responses are not logged in clear text; log session id, status, latency, token counts.
+- Prompts, responses, raw cookies, and session IDs are not logged; log a non-reversible session correlation value, status, latency, and token counts.
 - Tool access is least privilege: the agent only reaches Gateway targets listed in Terraform.
 - Web browsing and code execution run only in AgentCore sandboxes.
 - The anonymous endpoint has route-level throttling; anonymous access can incur model and tool costs.

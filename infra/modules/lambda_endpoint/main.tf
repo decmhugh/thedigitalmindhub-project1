@@ -49,6 +49,8 @@ resource "aws_lambda_function" "this" {
   role             = aws_iam_role.this.arn
   runtime          = var.runtime
   handler          = "handler.lambda_handler"
+  timeout          = var.timeout
+  memory_size      = var.memory_size
   filename         = data.archive_file.zip.output_path
   source_code_hash = data.archive_file.zip.output_base64sha256
 

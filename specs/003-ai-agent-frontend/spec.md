@@ -1,6 +1,6 @@
 # Spec: Agent frontend demo
 
-Status: Draft
+Status: Approved
 
 ## Problem / Why
 
@@ -17,7 +17,7 @@ Provide a browser-based demo for testing the AI agent without exposing the front
 | Method | Path | Request | Success | Errors |
 | ------ | ---- | ------- | ------- | ------ |
 | GET | /app | none | 200 `text/html; charset=utf-8`, body from S3 object `html/agent.html` | 502 if object cannot be read |
-| POST | /agent/invoke | JSON `{"prompt": str, "session_id": str (optional)}`; no authentication | 200 JSON agent response | 400 invalid prompt; 429 throttled; 422 guardrail block; 502/504 agent failure |
+| POST | /agent/invoke | JSON `{"prompt": str, "new_session": bool (optional)}`; no authentication; browser sends the `agent_session` cookie automatically | 200 JSON agent response; first/new session sets the cookie | 400 invalid prompt; 429 throttled; 422 guardrail block; 502/504 agent failure |
 
 ## Deployment and object path
 
@@ -35,8 +35,8 @@ Provide a browser-based demo for testing the AI agent without exposing the front
 - AC3: The deployment script runs `aws s3 sync` after Terraform setup, uploading every `*.html` file from the frontend source directory only to the `html/` prefix; `agent.html` updates when its source changes.
 - AC4: The page uses jQuery 3.7.1 from the public jQuery CDN (`https://code.jquery.com/jquery-3.7.1.min.js`).
 - AC5: A demo user can submit a prompt to `POST /agent/invoke` without signing in or sending an authorization token.
-- AC6: The page displays agent replies and errors, reuses the returned session ID for follow-up prompts, and can start a new session.
-- AC7: The page does not request passwords or tokens; session ID remains in memory only and is not persisted in browser storage.
+- AC6: The browser sends the HTTP-only `agent_session` cookie for follow-up prompts; the page never reads or stores the cookie value. "New session" sends `new_session: true` to rotate it.
+- AC7: The page has no login, password, or token handling and uses no browser storage.
 - AC8: The page displays a generic rate-limit response when the API returns HTTP 429.
 
 ## Non-functional

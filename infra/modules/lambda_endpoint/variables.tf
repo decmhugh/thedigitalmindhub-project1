@@ -44,3 +44,13 @@ variable "log_retention_days" {
   type    = number
   default = 14
 }
+
+variable "timeout" {
+  type    = number
+  default = 3
+}
+
+variable "memory_size" {
+  type    = number
+  default = 128
+}

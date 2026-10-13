@@ -44,6 +44,75 @@ resource "aws_iam_role_policy" "agent_runtime_ecr" {
   policy = data.aws_iam_policy_document.agent_runtime_ecr.json
 }
 
+locals {
+  agent_model_id = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+}
+
+data "aws_iam_policy_document" "agent_runtime_tools" {
+  # The EU inference profile routes across EU regions, so the foundation-model ARN needs a region wildcard.
+  statement {
+    actions = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/eu.${local.agent_model_id}",
+      "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${local.agent_model_id}",
+    ]
+  }
+
+  statement {
+    actions = [
+      "bedrock-agentcore:StartCodeInterpreterSession",
+      "bedrock-agentcore:InvokeCodeInterpreter",
+      "bedrock-agentcore:StopCodeInterpreterSession",
+      "bedrock-agentcore:GetCodeInterpreterSession",
+    ]
+    resources = ["arn:${data.aws_partition.current.partition}:bedrock-agentcore:${var.region}:aws:code-interpreter/aws.codeinterpreter.v1"]
+  }
+
+  statement {
+    actions   = ["bedrock:ApplyGuardrail"]
+    resources = [aws_bedrock_guardrail.agent.guardrail_arn]
+  }
+
+  statement {
+    actions = [
+      "bedrock-agentcore:CreateEvent",
+      "bedrock-agentcore:GetEvent",
+      "bedrock-agentcore:ListEvents",
+      "bedrock-agentcore:DeleteEvent",
+      "bedrock-agentcore:ListSessions",
+      "bedrock-agentcore:ListActors",
+    ]
+    resources = [aws_bedrockagentcore_memory.agent.arn]
+  }
+
+  statement {
+    actions   = ["bedrock-agentcore:InvokeGateway"]
+    resources = [aws_bedrockagentcore_gateway.agent.gateway_arn]
+  }
+
+  statement {
+    actions = [
+      "bedrock-agentcore:StartBrowserSession",
+      "bedrock-agentcore:GetBrowserSession",
+      "bedrock-agentcore:StopBrowserSession",
+      "bedrock-agentcore:ConnectBrowserAutomationStream",
+      "bedrock-agentcore:UpdateBrowserStream",
+    ]
+    resources = ["arn:${data.aws_partition.current.partition}:bedrock-agentcore:${var.region}:aws:browser/aws.browser.v1"]
+  }
+
+  statement {
+    actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"]
+    resources = ["arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "agent_runtime_tools" {
+  name   = "model-and-tools"
+  role   = aws_iam_role.agent_runtime.id
+  policy = data.aws_iam_policy_document.agent_runtime_tools.json
+}
+
 resource "aws_bedrockagentcore_agent_runtime" "agent" {
   count = var.agent_container_image_uri == "" ? 0 : 1
 
@@ -57,7 +126,13 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     }
   }
 
-  environment_variables = var.agent_runtime_environment
+  environment_variables = merge(var.agent_runtime_environment, {
+    MODEL_ID          = "eu.${local.agent_model_id}"
+    GUARDRAIL_ID      = aws_bedrock_guardrail.agent.guardrail_id
+    GUARDRAIL_VERSION = aws_bedrock_guardrail_version.agent.version
+    MEMORY_ID         = aws_bedrockagentcore_memory.agent.id
+    GATEWAY_URL       = aws_bedrockagentcore_gateway.agent.gateway_url
+  })
 
   network_configuration {
     network_mode = "PUBLIC"
@@ -67,5 +142,5 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     server_protocol = "HTTP"
   }
 
-  depends_on = [aws_iam_role_policy.agent_runtime_ecr]
+  depends_on = [aws_iam_role_policy.agent_runtime_ecr, aws_iam_role_policy.agent_runtime_tools]
 }

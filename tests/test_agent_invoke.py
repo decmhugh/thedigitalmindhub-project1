@@ -1,6 +1,5 @@
 import io
 import json
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -8,17 +7,15 @@ from botocore.exceptions import ClientError, ReadTimeoutError
 
 from src.agent_invoke import handler
 
-
 RUNTIME_ARN = "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/test"
+SESSION = "a" * 36
 
 
-def api_event(body, claims=None):
-    return {
-        "body": body,
-        "requestContext": {
-            "authorizer": {"jwt": {"claims": claims or {}}},
-        },
-    }
+def api_event(body, cookie=None):
+    event = {"body": body, "requestContext": {}}
+    if cookie:
+        event["cookies"] = [cookie]
+    return event
 
 
 def configure_clients(monkeypatch, runtime_response=None, runtime_error=None):
@@ -31,67 +28,82 @@ def configure_clients(monkeypatch, runtime_response=None, runtime_error=None):
     else:
         runtime.invoke_agent_runtime.return_value = runtime_response or {
             "response": io.BytesIO(b'{"response":"Hello from agent"}'),
-            "contentType": "application/json",
         }
-    client_factory = Mock(side_effect=lambda service, **kwargs: {"ssm": ssm, "bedrock-agentcore": runtime}[service])
-    return ssm, runtime, patch.object(handler.boto3, "client", client_factory)
+    factory = Mock(side_effect=lambda service, **kwargs: {"ssm": ssm, "bedrock-agentcore": runtime}[service])
+    return runtime, patch.object(handler.boto3, "client", factory)
 
 
-def test_valid_request_invokes_runtime_and_generates_session(monkeypatch):
-    ssm, runtime, client_patch = configure_clients(monkeypatch)
+def session_cookie(result):
+    cookies = result.get("cookies", [])
+    assert len(cookies) == 1
+    return cookies[0]
+
+
+def test_first_request_sets_browser_session_cookie_without_exposing_id(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
     with client_patch:
-        result = handler.lambda_handler(api_event('{"prompt":"hello"}', {"sub": "user-123"}), None)
-
-    assert result["statusCode"] == 200
-    response = json.loads(result["body"])
-    assert response["response"] == "Hello from agent"
-    assert len(response["session_id"]) >= 33
-    ssm.get_parameter.assert_called_once_with(Name="/test/agent/runtime-arn", WithDecryption=False)
-    call = runtime.invoke_agent_runtime.call_args.kwargs
-    assert call["agentRuntimeArn"] == RUNTIME_ARN
-    assert call["runtimeSessionId"] == response["session_id"]
-    assert json.loads(call["payload"]) == {"prompt": "hello", "user_id": "user-123"}
-
-
-def test_supplied_session_id_is_reused(monkeypatch):
-    _, runtime, client_patch = configure_clients(monkeypatch)
-    session_id = "s" * 36
-    with client_patch:
-        result = handler.lambda_handler(
-            api_event('{"prompt":"hello","session_id":"' + session_id + '"}', {"sub": "user-123"}),
-            None,
-        )
-
-    assert json.loads(result["body"])["session_id"] == session_id
-    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] == session_id
-
-
-@pytest.mark.parametrize("body", ["not json", "{}", '{"prompt":"  "}', "null"])
-def test_invalid_body_returns_400_without_aws_calls(monkeypatch, body):
-    _, _, client_patch = configure_clients(monkeypatch)
-    with client_patch as client_factory:
-        result = handler.lambda_handler(api_event(body, {"sub": "user-123"}), None)
-
-    assert result["statusCode"] == 400
-    client_factory.assert_not_called()
-
-
-def test_missing_jwt_subject_returns_401_without_aws_calls(monkeypatch):
-    _, _, client_patch = configure_clients(monkeypatch)
-    with client_patch as client_factory:
         result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
 
-    assert result["statusCode"] == 401
-    client_factory.assert_not_called()
+    assert result["statusCode"] == 200
+    assert json.loads(result["body"]) == {"response": "Hello from agent"}
+    cookie = session_cookie(result)
+    assert cookie.startswith("agent_session=")
+    for attribute in ("Path=/agent", "Secure", "HttpOnly", "SameSite=Strict"):
+        assert attribute in cookie
+    assert "Expires" not in cookie and "Max-Age" not in cookie
+    session_id = cookie.split(";")[0].split("=", 1)[1]
+    assert len(session_id) >= 33
+    assert session_id not in result["body"]
+    call = runtime.invoke_agent_runtime.call_args.kwargs
+    assert call["agentRuntimeArn"] == RUNTIME_ARN
+    assert call["runtimeSessionId"] == session_id
+    assert json.loads(call["payload"]) == {"prompt": "hello"}
 
 
-def test_short_session_id_returns_400_without_aws_calls(monkeypatch):
-    _, _, client_patch = configure_clients(monkeypatch)
-    with client_patch as client_factory:
+def test_existing_cookie_session_is_reused_without_new_cookie(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}', f"agent_session={SESSION}"), None)
+
+    assert result["statusCode"] == 200
+    assert "cookies" not in result
+    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] == SESSION
+
+
+def test_new_session_flag_rotates_cookie(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
         result = handler.lambda_handler(
-            api_event('{"prompt":"hello","session_id":"too-short"}', {"sub": "user-123"}),
-            None,
+            api_event('{"prompt":"hello","new_session":true}', f"agent_session={SESSION}"), None
         )
+
+    new_id = session_cookie(result).split(";")[0].split("=", 1)[1]
+    assert new_id != SESSION
+    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] == new_id
+
+
+def test_malformed_cookie_is_replaced(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}', "agent_session=short"), None)
+
+    new_id = session_cookie(result).split(";")[0].split("=", 1)[1]
+    assert new_id != "short" and len(new_id) >= 33
+
+
+def test_request_needs_no_authorization(monkeypatch):
+    _, client_patch = configure_clients(monkeypatch)
+    with client_patch:
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
+
+    assert result["statusCode"] == 200
+
+
+@pytest.mark.parametrize("body", ["not json", "{}", '{"prompt":"  "}', "null", '{"prompt":"hi","new_session":"yes"}'])
+def test_invalid_body_returns_400_without_aws_calls(monkeypatch, body):
+    _, client_patch = configure_clients(monkeypatch)
+    with client_patch as client_factory:
+        result = handler.lambda_handler(api_event(body), None)
 
     assert result["statusCode"] == 400
     client_factory.assert_not_called()
@@ -99,9 +111,9 @@ def test_short_session_id_returns_400_without_aws_calls(monkeypatch):
 
 def test_agentcore_timeout_returns_504_without_internal_details(monkeypatch):
     error = ReadTimeoutError(endpoint_url="https://runtime.example")
-    _, _, client_patch = configure_clients(monkeypatch, runtime_error=error)
+    _, client_patch = configure_clients(monkeypatch, runtime_error=error)
     with client_patch:
-        result = handler.lambda_handler(api_event('{"prompt":"hello"}', {"sub": "user-123"}), None)
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
 
     assert result["statusCode"] == 504
     assert "runtime.example" not in result["body"]
@@ -109,9 +121,9 @@ def test_agentcore_timeout_returns_504_without_internal_details(monkeypatch):
 
 def test_agentcore_failure_returns_502_without_internal_details(monkeypatch):
     error = ClientError({"Error": {"Code": "InternalServerException", "Message": "secret details"}}, "InvokeAgentRuntime")
-    _, _, client_patch = configure_clients(monkeypatch, runtime_error=error)
+    _, client_patch = configure_clients(monkeypatch, runtime_error=error)
     with client_patch:
-        result = handler.lambda_handler(api_event('{"prompt":"hello"}', {"sub": "user-123"}), None)
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
 
     assert result["statusCode"] == 502
     assert "secret details" not in result["body"]
@@ -119,9 +131,52 @@ def test_agentcore_failure_returns_502_without_internal_details(monkeypatch):
 
 def test_guardrail_block_returns_422_without_internal_details(monkeypatch):
     error = ClientError({"Error": {"Code": "GuardrailIntervened", "Message": "blocked content"}}, "InvokeAgentRuntime")
-    _, _, client_patch = configure_clients(monkeypatch, runtime_error=error)
+    _, client_patch = configure_clients(monkeypatch, runtime_error=error)
     with client_patch:
-        result = handler.lambda_handler(api_event('{"prompt":"hello"}', {"sub": "user-123"}), None)
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
 
     assert result["statusCode"] == 422
     assert "blocked content" not in result["body"]
+
+
+def test_runtime_reported_guardrail_block_returns_422_without_leaking_text(monkeypatch):
+    blocked = {"response": io.BytesIO(b'{"response":"policy text","blocked":true}')}
+    _, client_patch = configure_clients(monkeypatch, runtime_response=blocked)
+    with client_patch:
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
+
+    assert result["statusCode"] == 422
+    assert "policy text" not in result["body"]
+
+
+def test_failure_logs_error_type_and_code_but_not_message_or_prompt(monkeypatch, caplog):
+    error = ClientError({"Error": {"Code": "AccessDeniedException", "Message": "secret details"}}, "InvokeAgentRuntime")
+    _, client_patch = configure_clients(monkeypatch, runtime_error=error)
+    with client_patch, caplog.at_level("INFO"):
+        handler.lambda_handler(api_event('{"prompt":"secret prompt"}', f"agent_session={SESSION}"), None)
+
+    assert "ClientError" in caplog.text
+    assert "AccessDeniedException" in caplog.text
+    assert "secret details" not in caplog.text
+    assert "secret prompt" not in caplog.text
+    assert SESSION not in caplog.text
+
+
+def test_missing_configuration_is_logged_as_error_type(monkeypatch, caplog):
+    monkeypatch.delenv("AGENT_RUNTIME_ARN_PARAM", raising=False)
+    _, client_patch = configure_clients(monkeypatch)
+    monkeypatch.delenv("AGENT_RUNTIME_ARN_PARAM", raising=False)
+    with client_patch, caplog.at_level("INFO"):
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
+
+    assert result["statusCode"] == 502
+    assert "KeyError" in caplog.text
+
+
+def test_logs_do_not_contain_session_id_or_prompt(monkeypatch, caplog):
+    _, client_patch = configure_clients(monkeypatch)
+    with client_patch, caplog.at_level("INFO"):
+        handler.lambda_handler(api_event('{"prompt":"secret prompt"}', f"agent_session={SESSION}"), None)
+
+    assert SESSION not in caplog.text
+    assert "secret prompt" not in caplog.text

@@ -11,6 +11,14 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.this.id
   name        = "$default"
   auto_deploy = true
+
+  route_settings {
+    route_key              = "POST /agent/invoke"
+    throttling_rate_limit  = 2
+    throttling_burst_limit = 5
+  }
+
+  depends_on = [module.agent_invoke]
 }
 
 module "hello" {
