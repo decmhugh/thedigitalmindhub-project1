@@ -5,6 +5,7 @@ crash.log
 *.tfplan
 *.tfvars.secret
 .env
+.creds
 build/
 __pycache__/
 .pytest_cache/

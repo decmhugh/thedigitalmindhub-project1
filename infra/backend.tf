@@ -1,10 +1,10 @@
-# Create the bucket and lock table first, then fill in values (or pass via -backend-config).
+# Create the bucket first (versioning enabled), then fill in the name or pass via -backend-config.
 terraform {
   backend "s3" {
-    bucket         = "REPLACE-tfstate-bucket"
-    key            = "project1/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "REPLACE-tfstate-lock"
-    encrypt        = true
+    bucket       = "dmh-app-prod1-bucket"
+    key          = "project1/terraform.tfstate"
+    region       = "eu-west-1"
+    use_lockfile = true
+    encrypt      = true
   }
 }

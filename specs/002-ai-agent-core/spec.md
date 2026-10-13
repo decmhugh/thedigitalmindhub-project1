@@ -1,44 +1,72 @@
-# Spec: AI agent core (Amazon Bedrock AgentCore)
+# Spec: Fully capable AI agent (Amazon Bedrock AgentCore)
 
 Status: Draft
 
 ## Problem / Why
 
-Expose an AI agent hosted on Amazon Bedrock AgentCore Runtime through the existing HTTP API, so clients can chat with it without AWS credentials.
+Provide a capable AI agent through a public demo API so users can test it without creating an account. The agent uses sandboxed tools and safety controls while limiting anonymous invocation volume.
 
 ## User stories
 
-- As a client app, I want to send a prompt and get the agent's reply so that I can embed the agent in my product.
-- As a client app, I want to reuse a session id so that the agent keeps conversation context.
+- As a demo user, I want to submit a prompt and get the agent's reply without signing in.
+- As a demo user, I want the agent to retain conversation context within the session I provide.
+- As a user, I want the agent to call project tools, execute code, and browse the web when useful.
+- As an operator, I want safety filtering and operational telemetry while keeping prompt content out of logs.
+
+## Capabilities
+
+| Capability | Implementation | Included |
+| ---------- | -------------- | -------- |
+| Reasoning | LangGraph agent, Claude Sonnet via Bedrock | yes |
+| Hosting | AgentCore Runtime (container, created by this repo) | yes |
+| Memory | AgentCore short-term session memory; no cross-session identity memory | yes |
+| Tools | AgentCore Gateway (MCP) exposing selected project Lambda endpoints | yes |
+| Code execution | AgentCore Code Interpreter | yes |
+| Web browsing | AgentCore Browser (unrestricted site access) | yes |
+| Safety | Bedrock Guardrails (content, PII, prompt attack) on input and output | yes |
+| Observability | AgentCore observability, CloudWatch logs/metrics, X-Ray traces, dashboard | yes |
+| Streaming | Deferred; anonymous access stays behind the throttled HTTP API | no |
+| Authentication | None on the public demo invoke API; Lambda-to-runtime access uses IAM | no user login |
+| RAG / Knowledge Bases | - | no |
 
 ## API contract
 
 | Method | Path | Request | Success | Errors |
 | ------ | ---- | ------- | ------- | ------ |
-| POST | /agent/invoke | JSON `{"prompt": str, "session_id": str (optional, 33+ chars)}` | 200 `{"response": str, "session_id": str}` | 400 invalid/missing prompt; 502 agent runtime failure; 504 agent timeout |
+| POST | /agent/invoke | JSON `{"prompt": str, "session_id": str (optional, 33+ chars)}`; no authentication | 200 `{"response": str, "session_id": str}` | 400 invalid body; 422 blocked by guardrail; 429 throttled; 502 runtime failure; 504 timeout |
+| AgentCore runtime endpoint | Internal invocation by Lambda using IAM | Agent payload | Runtime response | Not exposed as a public client route |
 
 ## Acceptance criteria
 
-- AC1: A valid request invokes the AgentCore runtime (`InvokeAgentRuntime`) with the prompt as payload and returns 200 with the agent's text and the session id.
-- AC2: A missing or empty `prompt`, or a body that is not valid JSON, returns 400 without calling the runtime.
-- AC3: If `session_id` is omitted, one is generated and returned; if supplied, it is passed through unchanged.
-- AC4: Runtime errors map to 502 (service error) or 504 (timeout) with a generic message; no internal details leak.
-- AC5: The agent runtime ARN is read from configuration (SSM parameter name in env), never hardcoded.
+- AC1: A valid anonymous request returns 200 with the agent's text and a session id.
+- AC2: A missing or empty `prompt`, invalid JSON, or invalid session id returns 400 without invoking the runtime.
+- AC3: A request without an Authorization header can invoke the API; the request is still subject to API Gateway throttling.
+- AC4: If `session_id` is omitted, one is generated and returned; if supplied, it is passed through unchanged.
+- AC5: The agent uses earlier turns within the same session; it does not retrieve or share personal memory across sessions.
+- AC6: The agent can call at least one project endpoint (`GET /hello`) as a Gateway tool and use its result.
+- AC7: The agent can execute code through Code Interpreter and browse a page through Browser, each only when the model requests it.
+- AC8: Input or output blocked by the guardrail returns 422 with a generic message; PII is masked in responses and logs.
+- AC9: Runtime errors map to 502 and timeouts to 504 with generic messages; no internal details leak.
+- AC10: API Gateway applies a rate limit of 2 requests per second and a burst limit of 5 to `POST /agent/invoke`; excess requests receive 429.
+- AC11: Each turn emits a trace with session id, tool calls, latency, and token counts; a dashboard and an error-rate alarm exist.
+- AC12: Runtime ARN, memory ID, Gateway URL, and guardrail ID come from configuration, never hardcoded.
 
 ## Non-functional
 
-- Handler timeout 60 s, memory 256 MB.
-- Prompts are not logged; log only session id, status, and latency.
-- Authentication: none for now (see open questions).
+- Invoke Lambda: timeout 60 s, 256 MB. Agent turn budget: 55 s.
+- Prompts and responses are not logged in clear text; log session id, status, latency, token counts.
+- Tool access is least privilege: the agent only reaches Gateway targets listed in Terraform.
+- Web browsing and code execution run only in AgentCore sandboxes.
+- The anonymous endpoint has route-level throttling; anonymous access can incur model and tool costs.
 
 ## Out of scope
 
-- Building or deploying the agent runtime itself (container/agent code).
-- Streaming responses.
-- Authentication and rate limiting.
+- Cognito authentication, user provisioning, and cross-session personal memory.
+- Public direct access to AgentCore Runtime or streaming responses.
+- RAG / Knowledge Bases, front-end UI implementation, and multi-tenant billing.
 
-## Open questions
+## Implementation checks
 
-- [NEEDS CLARIFICATION] Is the AgentCore runtime already deployed? If not, should a separate spec cover it?
-- [NEEDS CLARIFICATION] Which auth should protect `/agent/invoke` (IAM, JWT authorizer, API key)?
-- [NEEDS CLARIFICATION] Is streaming needed in a later iteration?
+- Verify AgentCore Runtime and Claude Sonnet inference-profile availability in `eu-west-1` before deployment.
+- Browser access to any website is approved; agent instructions must treat web content as untrusted.
+- AWS provider upgrade from `~> 5.0` to `~> 6.0` is approved.

@@ -28,12 +28,12 @@ Serverless AWS application managed with Terraform. One Lambda function per API e
 
 ## Conventions
 
-- Terraform >= 1.6, AWS provider ~> 5.0; pin versions in `versions.tf`.
+- Terraform >= 1.10, AWS provider ~> 6.0; pin versions in `versions.tf`.
 - Resource names: `${var.project}-${var.environment}-<name>`; tag everything via provider `default_tags`.
 - Each Lambda gets its own least-privilege IAM role; never use `*` actions/resources without justification.
 - Explicit CloudWatch log groups with retention set.
 - No secrets in code or tfvars; use SSM Parameter Store / Secrets Manager.
-- Remote state in S3 with DynamoDB locking; never commit `*.tfstate`.
+- Remote state in S3 with native locking (`use_lockfile`); never commit `*.tfstate`.
 - Python 3.12 runtime, handlers named `handler.lambda_handler`.
 
 ## Safety rules for agents

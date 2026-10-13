@@ -29,6 +29,12 @@ variable "policy_json" {
   description = "Optional least-privilege IAM policy JSON for the function."
 }
 
+variable "enable_custom_policy" {
+  type        = bool
+  default     = false
+  description = "Whether to create the custom inline policy resource."
+}
+
 variable "runtime" {
   type    = string
   default = "python3.12"

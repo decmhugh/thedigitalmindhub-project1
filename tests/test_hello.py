@@ -1,10 +1,5 @@
 import json
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src" / "hello"))
-
-from handler import lambda_handler  # noqa: E402
+from src.hello.handler import lambda_handler
 
 
 def test_hello():

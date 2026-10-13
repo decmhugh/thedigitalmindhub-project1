@@ -9,5 +9,33 @@ variable "environment" {
 
 variable "region" {
   type    = string
-  default = "us-east-1"
+  default = "eu-west-1"
+}
+
+variable "agent_html_bucket" {
+  type    = string
+  default = "dmh-app-prod1-bucket"
+}
+
+variable "agent_html_key" {
+  type    = string
+  default = "html/agent.html"
+}
+
+variable "agent_container_image_uri" {
+  type        = string
+  default     = ""
+  description = "Published ARM64 ECR image URI for the AgentCore runtime."
+}
+
+variable "agent_runtime_environment" {
+  type        = map(string)
+  default     = {}
+  description = "Environment variables passed to the AgentCore runtime container."
+}
+
+variable "cognito_user_pool_client_id" {
+  type        = string
+  default     = ""
+  description = "Cognito app client ID used by the demo page sign-in form."
 }
