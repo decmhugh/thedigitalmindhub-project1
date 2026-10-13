@@ -1,7 +1,7 @@
 # Tasks: Anonymous AI agent core
 
 - [ ] T0 Review and approve the revised spec, plan, and tasks
-- [ ] T1 Verify AgentCore Runtime and Claude model availability in `eu-west-1`
+- [x] T1 Verify AgentCore Runtime and Nova Pro inference profile are available in `eu-west-1`
 - [x] T2 Upgrade AWS provider to `~> 6.0` and validate provider schema
 - [ ] T3 Write failing tests for anonymous invoke validation, sessions, guardrail mapping, and runtime failures
 - [ ] T4 Update `src/agent_invoke/handler.py` to accept no JWT, generate/reuse session IDs, and pass no user identity

@@ -17,7 +17,7 @@ Provide a capable AI agent through a public demo API so users can test it withou
 
 | Capability | Implementation | Included |
 | ---------- | -------------- | -------- |
-| Reasoning | LangGraph agent, Claude Sonnet via Bedrock | yes |
+| Reasoning | LangGraph agent, Amazon Nova Pro via Bedrock | yes |
 | Hosting | AgentCore Runtime (container, created by this repo) | yes |
 | Memory | AgentCore short-term session memory; no cross-session identity memory | yes |
 | Tools | AgentCore Gateway (MCP) exposing selected project Lambda endpoints | yes |
@@ -69,6 +69,6 @@ Provide a capable AI agent through a public demo API so users can test it withou
 
 ## Implementation checks
 
-- Verify AgentCore Runtime and Claude Sonnet inference-profile availability in `eu-west-1` before deployment.
+- Verify AgentCore Runtime and the Amazon Nova Pro inference profile in `eu-west-1` before deployment.
 - Browser access to any website is approved; agent instructions must treat web content as untrusted.
 - AWS provider upgrade from `~> 5.0` to `~> 6.0` is approved.

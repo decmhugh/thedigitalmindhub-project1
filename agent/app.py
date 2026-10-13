@@ -1,4 +1,7 @@
 import logging
+import hashlib
+import json
+import logging
 import os
 
 from bedrock_agentcore import BedrockAgentCoreApp
@@ -16,8 +19,10 @@ from agent.tools import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL_ID = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+DEFAULT_MODEL_ID = "eu.amazon.nova-pro-v1:0"
 
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+logger = logging.getLogger("agent")
 app = BedrockAgentCoreApp()
 _agent = None
 
@@ -60,7 +65,20 @@ def get_agent():
 
 @app.entrypoint
 async def invoke(payload, context):
-    return await handle_request(get_agent(), payload, context.session_id or "default")
+    session_id = context.session_id or "default"
+    correlation = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
+    logger.info(json.dumps({"event": "invoke_started", "session": correlation}))
+    try:
+        result = await handle_request(get_agent(), payload, session_id)
+    except Exception as error:
+        logger.error(json.dumps({
+            "event": "invoke_failed",
+            "session": correlation,
+            "error_type": type(error).__name__,
+        }))
+        raise
+    logger.info(json.dumps({"event": "invoke_succeeded", "session": correlation}))
+    return result
 
 
 if __name__ == "__main__":

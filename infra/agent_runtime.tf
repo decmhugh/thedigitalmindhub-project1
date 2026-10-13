@@ -45,7 +45,7 @@ resource "aws_iam_role_policy" "agent_runtime_ecr" {
 }
 
 locals {
-  agent_model_id = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+  agent_model_id = "amazon.nova-pro-v1:0"
 }
 
 data "aws_iam_policy_document" "agent_runtime_tools" {
@@ -102,8 +102,34 @@ data "aws_iam_policy_document" "agent_runtime_tools" {
   }
 
   statement {
-    actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"]
+    actions   = ["logs:CreateLogGroup", "logs:DescribeLogStreams"]
     resources = ["arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*"]
+  }
+
+  statement {
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*"]
+  }
+
+  statement {
+    actions   = ["logs:PutResourcePolicy"]
+    resources = ["arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/runtimes/${local.agent_runtime_name}-*"]
+  }
+
+  statement {
+    actions   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets"]
+    resources = ["*"]
+  }
+
+  statement {
+    actions   = ["cloudwatch:PutMetricData"]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = ["bedrock-agentcore"]
+    }
   }
 }
 
@@ -128,6 +154,7 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
 
   environment_variables = merge(var.agent_runtime_environment, {
     MODEL_ID          = "eu.${local.agent_model_id}"
+    LOG_LEVEL         = "INFO"
     GUARDRAIL_ID      = aws_bedrock_guardrail.agent.guardrail_id
     GUARDRAIL_VERSION = aws_bedrock_guardrail_version.agent.version
     MEMORY_ID         = aws_bedrockagentcore_memory.agent.id

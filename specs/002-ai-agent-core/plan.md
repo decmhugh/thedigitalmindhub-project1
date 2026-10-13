@@ -15,14 +15,14 @@ flowchart LR
   G --> T[Selected project Lambda tools]
   R --> CI[Code Interpreter]
   R --> W[Browser]
-  R --> BR[Bedrock Claude + Guardrail]
+  R --> BR[Bedrock Nova Pro + Guardrail]
   R --> O[CloudWatch / X-Ray]
 ```
 
 ## Design
 
 - Invoke Lambda validates JSON, creates or accepts a session ID, reads the runtime ARN from SSM, and invokes AgentCore using its IAM role. Payload contains only `prompt`; `runtimeSessionId` carries session context. No client identity is accepted or inferred.
-- The LangGraph container uses `ChatBedrockConverse` with Claude Sonnet, Bedrock Guardrails, AgentCore Memory scoped to runtime sessions, Gateway MCP tools, Browser, and Code Interpreter.
+- The LangGraph container uses `ChatBedrockConverse` with the `eu.amazon.nova-pro-v1:0` inference profile, Bedrock Guardrails, AgentCore Memory scoped to runtime sessions, Gateway MCP tools, Browser, and Code Interpreter.
 - Do not configure a public runtime endpoint. API Gateway is the only client entry point; the Lambda calls the runtime with IAM authorization.
 - Keep the invoke API non-streaming. Direct runtime streaming is deferred because it would bypass API Gateway route throttling.
 - Add per-route API Gateway settings for `POST /agent/invoke`: 2 requests/second, burst 5.
@@ -70,4 +70,4 @@ flowchart LR
 
 - Anonymous invocations can create model/tool costs; 2 RPS and burst 5 are demo safeguards, not strong identity-based quotas. Add a budget alarm and monitor usage.
 - Streaming and cross-session personal memory are not supported without an authenticated design.
-- Confirm AgentCore and Claude availability in `eu-west-1`; build/push ARM64 image before runtime creation.
+- Confirm AgentCore and Nova Pro availability in `eu-west-1`; build/push ARM64 image before runtime creation.
