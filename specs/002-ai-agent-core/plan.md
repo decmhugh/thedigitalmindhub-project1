@@ -11,6 +11,7 @@ flowchart LR
   A -->|POST /agent/invoke| L[Invoke Lambda]
   L -->|IAM InvokeAgentRuntime| R[AgentCore Runtime]
   R --> M[Short-term session memory]
+  R --> V[S3 Vectors bucket/index (empty initially)]
   R --> G[AgentCore Gateway]
   G --> T[Selected project Lambda tools]
   R --> CI[Code Interpreter]
@@ -33,6 +34,7 @@ flowchart LR
 - `agent_runtime.tf`: runtime, execution role, and IAM permissions.
 - `agent_ecr.tf`: private ECR repository, image scanning, immutable tags, lifecycle policy.
 - `agent_memory.tf`: short-term session memory only; no long-term user strategies.
+- `agent_vectors.tf`: encrypted S3 Vectors bucket and an empty 1024-dimensional `float32` cosine index for future Titan Text Embeddings V2 vectors. Do not add ingestion or query permissions in this phase.
 - `agent_gateway.tf`, `agent_tools.tf`: Gateway targets, Browser, Code Interpreter.
 - `guardrail.tf`, `observability.tf`, `ssm.tf`: guardrail, logs/dashboard/alarm, and runtime configuration.
 - `infra/main.tf`: add `POST /agent/invoke` Lambda module and API Gateway route throttling. Do not add a Cognito authorizer.
@@ -54,6 +56,7 @@ flowchart LR
 - pytest for anonymous invoke validation, session ID behavior, runtime calls, generic errors, and 429 configuration; no live AWS calls.
 - pytest for the agent graph using a fake model and fake tools; verify session-only memory behavior.
 - Terraform fmt/validate/tflint/checkov; review the plan for route throttle settings and least-privilege IAM.
+- Review the plan for exactly one vector bucket and one index, with no object ingestion or runtime vector permissions.
 - Manual smoke test calls `/agent/invoke` without an Authorization header and verifies a valid response.
 
 ## Constitution check
@@ -69,5 +72,6 @@ flowchart LR
 ## Risks
 
 - Anonymous invocations can create model/tool costs; 2 RPS and burst 5 are demo safeguards, not strong identity-based quotas. Add a budget alarm and monitor usage.
+- The S3 Vectors store is provisioned empty; a separate approved feature must define its corpus, ingestion lifecycle, and runtime retrieval policy.
 - Streaming and cross-session personal memory are not supported without an authenticated design.
 - Confirm AgentCore and Nova Pro availability in `eu-west-1`; build/push ARM64 image before runtime creation.

@@ -16,3 +16,5 @@
 - [ ] T13 Run pytest, Terraform fmt/validate, tflint, and checkov
 - [ ] T14 Review the Terraform plan; wait for explicit apply approval
 - [ ] T15 After approved apply, run the anonymous invoke smoke test
+- [ ] T16 Add encrypted S3 Vectors bucket and empty Titan-compatible index (AC15)
+- [ ] T17 Test Terraform plan/schema for vector resources; confirm no ingestion or runtime vector permissions (AC16)
