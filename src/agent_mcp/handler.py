@@ -18,7 +18,11 @@ SUPPORTED_PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", "2025-06-18", "2025-1
 DEFAULT_PROTOCOL_VERSION = "2025-11-25"
 SESSION_TTL_SECONDS = 24 * 60 * 60
 TOOL_NAME = "ask_agent"
-MAX_BODY_BYTES = 1_000_000
+IMAGE_TOOL_NAME = "read_image"
+DEFAULT_IMAGE_PROMPT = "Describe this image."
+IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+MAX_IMAGE_BYTES = 3_750_000
+MAX_BODY_BYTES = 5_100_000
 
 
 def _json_response(
@@ -172,7 +176,28 @@ def _tools_list(request_id: Any, session_id: str) -> dict[str, Any]:
                             },
                             "required": ["response"],
                         },
-                    }
+                    },
+                    {
+                        "name": IMAGE_TOOL_NAME,
+                        "description": "Ask the project AI agent a question about an image.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "image": {"type": "string", "minLength": 1, "description": "Base64-encoded image"},
+                                "mediaType": {"type": "string", "enum": sorted(IMAGE_MEDIA_TYPES)},
+                                "prompt": {"type": "string"},
+                            },
+                            "required": ["image", "mediaType"],
+                        },
+                        "outputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "response": {"type": "string"},
+                                "blocked": {"type": "boolean"},
+                            },
+                            "required": ["response"],
+                        },
+                    },
                 ]
             },
         },
@@ -227,17 +252,22 @@ def _log_failure(event: dict[str, Any], error: Exception) -> None:
     logger.error(json.dumps(entry))
 
 
-def _call_agent(prompt: str, session: dict[str, Any], session_id: str) -> dict[str, Any]:
+def _call_agent(
+    prompt: str, session: dict[str, Any], session_id: str, image: dict[str, str] | None = None
+) -> dict[str, Any]:
     started = time.monotonic()
     try:
         runtime_arn_param = os.environ["AGENT_RUNTIME_ARN_PARAM"]
         runtime_arn = boto3.client("ssm").get_parameter(
             Name=runtime_arn_param, WithDecryption=False
         )["Parameter"]["Value"]
+        agent_payload: dict[str, Any] = {"prompt": prompt}
+        if image is not None:
+            agent_payload["image"] = image
         result = boto3.client("bedrock-agentcore").invoke_agent_runtime(
             agentRuntimeArn=runtime_arn,
             runtimeSessionId=session["runtime_session_id"],
-            payload=json.dumps({"prompt": prompt}).encode("utf-8"),
+            payload=json.dumps(agent_payload).encode("utf-8"),
             qualifier="DEFAULT",
         )
         response, blocked = _agent_response(result)
@@ -288,17 +318,42 @@ def _tool_call(
     session_id: str,
 ) -> dict[str, Any]:
     params = request.get("params")
-    if not isinstance(params, dict) or params.get("name") != TOOL_NAME:
+    tool_name = params.get("name") if isinstance(params, dict) else None
+    if tool_name not in (TOOL_NAME, IMAGE_TOOL_NAME):
         return _rpc_error(request_id, -32602, "Unknown tool or invalid arguments", session_id=session_id)
     arguments = params.get("arguments")
-    prompt = arguments.get("prompt") if isinstance(arguments, dict) else None
+    if not isinstance(arguments, dict):
+        arguments = {}
+    prompt = arguments.get("prompt")
+    image = None
+    if tool_name == IMAGE_TOOL_NAME:
+        image = _validated_image(arguments)
+        if image is None or not (prompt is None or isinstance(prompt, str)):
+            return _rpc_error(request_id, -32602, "A valid image and media type are required", session_id=session_id)
+        prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else DEFAULT_IMAGE_PROMPT
     if not isinstance(prompt, str) or not prompt.strip():
         return _rpc_error(request_id, -32602, "A non-empty prompt is required", session_id=session_id)
     return _json_response(
         200,
-        {"jsonrpc": "2.0", "id": request_id, "result": _call_agent(prompt, session, session_id)},
+        {"jsonrpc": "2.0", "id": request_id, "result": _call_agent(prompt, session, session_id, image)},
         session_id,
     )
+
+
+def _validated_image(arguments: dict[str, Any]) -> dict[str, str] | None:
+    data = arguments.get("image")
+    media_type = arguments.get("mediaType")
+    if not isinstance(data, str) or not data or media_type not in IMAGE_MEDIA_TYPES:
+        return None
+    if len(data) > MAX_IMAGE_BYTES * 4 // 3 + 4:
+        return None
+    try:
+        decoded = base64.b64decode(data, validate=True)
+    except ValueError:
+        return None
+    if not decoded or len(decoded) > MAX_IMAGE_BYTES:
+        return None
+    return {"mediaType": media_type, "data": data}
 
 
 def _post(event: dict[str, Any]) -> dict[str, Any]:

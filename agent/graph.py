@@ -11,10 +11,27 @@ SYSTEM_PROMPT = (
 )
 
 ANONYMOUS_ACTOR = "anonymous"
+IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 
 
 def build_agent(model: Any, tools: list, checkpointer: Any = None):
     return create_agent(model, tools, system_prompt=SYSTEM_PROMPT, checkpointer=checkpointer or MemorySaver())
+
+
+def _user_content(prompt: str, image: Any) -> Any:
+    if image is None:
+        return prompt
+    if (
+        not isinstance(image, dict)
+        or image.get("mediaType") not in IMAGE_MEDIA_TYPES
+        or not isinstance(image.get("data"), str)
+        or not image["data"]
+    ):
+        raise ValueError("image must include a supported mediaType and base64 data")
+    return [
+        {"type": "text", "text": prompt},
+        {"type": "image", "base64": image["data"], "mime_type": image["mediaType"]},
+    ]
 
 
 def _text(content: Any) -> str:
@@ -29,9 +46,11 @@ async def handle_request(agent: Any, payload: Any, session_id: str) -> dict[str,
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError("prompt must be a non-empty string")
 
+    content = _user_content(prompt, payload.get("image"))
+
     # Anonymous callers share one actor id; isolation comes from the per-session thread id.
     result = await agent.ainvoke(
-        {"messages": [("user", prompt)]},
+        {"messages": [("user", content)]},
         config={"configurable": {"thread_id": session_id, "actor_id": ANONYMOUS_ACTOR}},
     )
     last = result["messages"][-1]

@@ -112,6 +112,35 @@ def test_guardrail_intervention_is_flagged_as_blocked():
     assert result == {"response": "Blocked by policy", "blocked": True}
 
 
+def test_image_payload_builds_multimodal_message():
+    agent = Mock()
+    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("a cat")]})
+    payload = {"prompt": "What is this?", "image": {"mediaType": "image/png", "data": "aGVsbG8="}}
+
+    result = asyncio.run(_handle_request(agent, payload, "session-a"))
+
+    assert result == {"response": "a cat"}
+    message = agent.ainvoke.call_args.args[0]["messages"][0]
+    assert message[0] == "user"
+    assert message[1] == [
+        {"type": "text", "text": "What is this?"},
+        {"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"},
+    ]
+
+
+@pytest.mark.parametrize(
+    "image",
+    [{}, "x", {"mediaType": "image/bmp", "data": "aGk="}, {"mediaType": "image/png", "data": ""}],
+)
+def test_invalid_image_is_rejected_before_calling_agent(image):
+    agent = Mock()
+    agent.ainvoke = AsyncMock()
+
+    with pytest.raises(ValueError):
+        asyncio.run(_handle_request(agent, {"prompt": "hi", "image": image}, "s"))
+    agent.ainvoke.assert_not_called()
+
+
 def test_request_config_carries_session_and_actor_for_memory():
     agent = Mock()
     agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("ok")]})

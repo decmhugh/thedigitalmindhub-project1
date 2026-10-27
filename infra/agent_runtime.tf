@@ -45,7 +45,8 @@ resource "aws_iam_role_policy" "agent_runtime_ecr" {
 }
 
 locals {
-  agent_model_id = "amazon.nova-pro-v1:0"
+  agent_model_id        = "amazon.nova-pro-v1:0"
+  agent_vision_model_id = "amazon.nova-lite-v1:0"
 }
 
 data "aws_iam_policy_document" "agent_runtime_tools" {
@@ -55,6 +56,8 @@ data "aws_iam_policy_document" "agent_runtime_tools" {
     resources = [
       "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/eu.${local.agent_model_id}",
       "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${local.agent_model_id}",
+      "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.current.account_id}:inference-profile/eu.${local.agent_vision_model_id}",
+      "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${local.agent_vision_model_id}",
     ]
   }
 
@@ -154,6 +157,7 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
 
   environment_variables = merge(var.agent_runtime_environment, {
     MODEL_ID          = "eu.${local.agent_model_id}"
+    VISION_MODEL_ID   = "eu.${local.agent_vision_model_id}"
     LOG_LEVEL         = "INFO"
     GUARDRAIL_ID      = aws_bedrock_guardrail.agent.guardrail_id
     GUARDRAIL_VERSION = aws_bedrock_guardrail_version.agent.version

@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 from unittest.mock import Mock, patch
@@ -18,7 +19,7 @@ class SessionTable:
     def put_item(self, Item):
         self.items[Item["session_id"]] = Item
 
-    def get_item(self, Key):
+    def get_item(self, Key, **kwargs):
         item = self.items.get(Key["session_id"])
         return {"Item": item} if item else {}
 
@@ -110,7 +111,77 @@ def test_initialization_and_tool_discovery(monkeypatch):
     assert initialized["statusCode"] == 200
     assert rpc_response(initialized)["result"]["protocolVersion"] == PROTOCOL_VERSION
     assert initialized["headers"]["MCP-Session-Id"] == session_id
-    assert rpc_response(listed)["result"]["tools"][0]["name"] == "ask_agent"
+    assert [tool["name"] for tool in rpc_response(listed)["result"]["tools"]] == ["ask_agent", "read_image"]
+
+
+PNG_B64 = base64.b64encode(b"\x89PNG fake image bytes").decode()
+
+
+def call_read_image(table, arguments):
+    _, session_id = initialize(table)
+    return handler.lambda_handler(
+        event(
+            "POST",
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "read_image", "arguments": arguments},
+            },
+            session_id,
+        ),
+        None,
+    )
+
+
+def test_read_image_forwards_image_to_agent(monkeypatch):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        result = call_read_image(table, {"image": PNG_B64, "mediaType": "image/png", "prompt": "What is it?"})
+
+    assert rpc_response(result)["result"]["content"] == [{"type": "text", "text": "Hello from agent"}]
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload == {"prompt": "What is it?", "image": {"mediaType": "image/png", "data": PNG_B64}}
+
+
+def test_read_image_uses_default_prompt(monkeypatch):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        call_read_image(table, {"image": PNG_B64, "mediaType": "image/png", "prompt": "  "})
+
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload["prompt"] == "Describe this image."
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {},
+        {"mediaType": "image/png"},
+        {"image": PNG_B64},
+        {"image": PNG_B64, "mediaType": "image/bmp"},
+        {"image": "not base64!!", "mediaType": "image/png"},
+        {"image": "", "mediaType": "image/png"},
+        {"image": PNG_B64, "mediaType": "image/png", "prompt": 5},
+        {"image": base64.b64encode(b"x" * (3_750_000 + 1)).decode(), "mediaType": "image/png"},
+    ],
+)
+def test_read_image_rejects_invalid_arguments_without_invoking_agent(monkeypatch, arguments):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        result = call_read_image(table, arguments)
+
+    assert rpc_response(result)["error"]["code"] == -32602
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_read_image_logs_do_not_include_image_or_prompt(monkeypatch, caplog):
+    table, _, client_patch, resource_patch = configure_clients(monkeypatch)
+    with caplog.at_level("INFO"), client_patch, resource_patch:
+        call_read_image(table, {"image": PNG_B64, "mediaType": "image/png", "prompt": "secret question"})
+
+    assert PNG_B64 not in caplog.text
+    assert "secret question" not in caplog.text
 
 
 def test_tool_call_invokes_agent_and_returns_text(monkeypatch):

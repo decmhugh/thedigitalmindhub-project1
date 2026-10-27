@@ -20,18 +20,19 @@ from agent.tools import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL_ID = "eu.amazon.nova-pro-v1:0"
+DEFAULT_VISION_MODEL_ID = "eu.amazon.nova-lite-v1:0"
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("agent")
 app = BedrockAgentCoreApp()
-_agent = None
+_agents: dict[bool, object] = {}
 
 
 def _region() -> str:
     return os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "eu-west-1"
 
 
-def _model(region: str) -> ChatBedrockConverse:
+def _model(region: str, vision: bool = False) -> ChatBedrockConverse:
     guardrail = None
     if os.environ.get("GUARDRAIL_ID"):
         guardrail = {
@@ -39,16 +40,16 @@ def _model(region: str) -> ChatBedrockConverse:
             "guardrailVersion": os.environ.get("GUARDRAIL_VERSION", "DRAFT"),
             "trace": "disabled",
         }
-    return ChatBedrockConverse(
-        model=os.environ.get("MODEL_ID", DEFAULT_MODEL_ID),
-        region_name=region,
-        guardrail_config=guardrail,
+    model_id = (
+        os.environ.get("VISION_MODEL_ID", DEFAULT_VISION_MODEL_ID)
+        if vision
+        else os.environ.get("MODEL_ID", DEFAULT_MODEL_ID)
     )
+    return ChatBedrockConverse(model=model_id, region_name=region, guardrail_config=guardrail)
 
 
-def get_agent():
-    global _agent
-    if _agent is None:
+def get_agent(vision: bool = False):
+    if vision not in _agents:
         region = _region()
         tools = [make_code_tool(code_interpreter_factory(region)), make_browser_tool(browser_fetcher(region))]
         if os.environ.get("GATEWAY_URL"):
@@ -59,8 +60,8 @@ def get_agent():
         checkpointer = None
         if os.environ.get("MEMORY_ID"):
             checkpointer = AgentCoreMemorySaver(os.environ["MEMORY_ID"], region_name=region)
-        _agent = build_agent(_model(region), tools, checkpointer)
-    return _agent
+        _agents[vision] = build_agent(_model(region, vision), tools, checkpointer)
+    return _agents[vision]
 
 
 @app.entrypoint
@@ -68,8 +69,9 @@ async def invoke(payload, context):
     session_id = context.session_id or "default"
     correlation = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
     logger.info(json.dumps({"event": "invoke_started", "session": correlation}))
+    vision = isinstance(payload, dict) and payload.get("image") is not None
     try:
-        result = await handle_request(get_agent(), payload, session_id)
+        result = await handle_request(get_agent(vision), payload, session_id)
     except Exception as error:
         logger.error(json.dumps({
             "event": "invoke_failed",
