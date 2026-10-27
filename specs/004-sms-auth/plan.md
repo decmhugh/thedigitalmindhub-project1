@@ -45,7 +45,6 @@ flowchart LR
 | auth_verify | `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `DeleteItem` | auth table ARN | Verify, register, create session |
 | auth_session, agent_invoke | `dynamodb:GetItem` | auth table ARN | Validate session |
 | auth_logout | `dynamodb:DeleteItem` | auth table ARN | Invalidate session |
-| auth_session, auth_logout, agent_invoke | `ssm:GetParameter` | pepper parameter ARN (only where hashing the phone is needed: agent_invoke) | Derive runtime session |
 | API Gateway | `lambda:InvokeFunction` | each auth Lambda | Routes |
 
 ## Terraform
