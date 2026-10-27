@@ -4,13 +4,13 @@ Status: Draft
 
 ## Problem / Why
 
-Provide a capable AI agent through a public demo API so users can test it without creating an account. The agent uses sandboxed tools and safety controls while limiting anonymous invocation volume.
+Provide a capable AI agent through an API for signed-in users (SMS login, spec 004). The agent uses sandboxed tools and safety controls while limiting invocation volume.
 
 ## User stories
 
-- As a demo user, I want to submit a prompt and get the agent's reply without signing in.
-- As a demo user, I want my browser to retain conversation context in a cookie for the current browsing session, without signing in.
-- As a demo user, I want to ask questions about the IASA corpus and receive answers grounded in retrieved source passages.
+- As a signed-in user, I want to submit a prompt and get the agent's reply.
+- As a signed-in user, I want my browser to retain conversation context in a cookie for the current browsing session.
+- As a signed-in user, I want to ask questions about the IASA corpus and receive answers grounded in retrieved source passages.
 - As a user, I want the agent to call project tools, execute code, and browse the web when useful.
 - As an operator, I want safety filtering and operational telemetry while keeping prompt content out of logs.
 
@@ -21,28 +21,28 @@ Provide a capable AI agent through a public demo API so users can test it withou
 | Reasoning | LangGraph agent, Amazon Nova Pro via Bedrock | yes |
 | Hosting | AgentCore Runtime (container, created by this repo) | yes |
 | Memory | AgentCore short-term session memory; no cross-session identity memory | yes |
-| Knowledge retrieval | Dedicated private S3 source bucket plus S3 Vectors bucket/index; Titan Text Embeddings V2; anonymous agent retrieval | yes |
+| Knowledge retrieval | Dedicated private S3 source bucket plus S3 Vectors bucket/index; Titan Text Embeddings V2; agent retrieval | yes |
 | Tools | AgentCore Gateway (MCP) exposing selected project Lambda endpoints | yes |
 | Code execution | AgentCore Code Interpreter | yes |
 | Web browsing | AgentCore Browser (unrestricted site access) | yes |
 | Safety | Bedrock Guardrails (content, PII, prompt attack) on input and output | yes |
 | Observability | AgentCore observability, CloudWatch logs/metrics, X-Ray traces, dashboard | yes |
-| Streaming | Deferred; anonymous access stays behind the throttled HTTP API | no |
-| Authentication | None on the public demo invoke API; Lambda-to-runtime access uses IAM | no user login |
+| Streaming | Deferred; access stays behind the throttled HTTP API | no |
+| Authentication | SMS login per spec 004 (`auth_session` cookie) on the invoke API; Lambda-to-runtime access uses IAM | yes |
 | RAG / Knowledge Bases | - | no |
 
 ## API contract
 
 | Method | Path | Request | Success | Errors |
 | ------ | ---- | ------- | ------- | ------ |
-| POST | /agent/invoke | JSON `{"prompt": str, "new_session": bool (optional)}`; no authentication; browser sends `agent_session` cookie automatically | 200 `{"response": str}`; first/new session response sets an `agent_session` cookie | 400 invalid body; 422 blocked by guardrail; 429 throttled; 502 runtime failure; 504 timeout |
+| POST | /agent/invoke | JSON `{"prompt": str, "new_session": bool (optional)}`; requires valid `auth_session` cookie (spec 004); browser sends `agent_session` cookie automatically | 200 `{"response": str}`; first/new session response sets an `agent_session` cookie | 400 invalid body; 401 not signed in; 422 blocked by guardrail; 429 throttled; 502 runtime failure; 504 timeout |
 | AgentCore runtime endpoint | Internal invocation by Lambda using IAM | Agent payload | Runtime response | Not exposed as a public client route |
 
 ## Acceptance criteria
 
-- AC1: A valid anonymous request returns 200 with the agent's text; it does not expose the session ID in the response body.
+- AC1: A valid signed-in request returns 200 with the agent's text; it does not expose the session ID in the response body.
 - AC2: A missing or empty `prompt` or invalid JSON returns 400 without invoking the runtime.
-- AC3: A request without an Authorization header can invoke the API; the request is still subject to API Gateway throttling.
+- AC3: A request without a valid `auth_session` cookie returns 401 without invoking the runtime; valid requests remain subject to API Gateway throttling.
 - AC4: On the first request, the Lambda generates an unpredictable session ID and returns it only in a cookie named `agent_session`; subsequent requests continue using that cookie.
 - AC5: The `agent_session` cookie is a browser-session cookie with `Path=/agent; Secure; HttpOnly; SameSite=Strict`, and has no `Expires` or `Max-Age` attribute.
 - AC6: A request with `new_session: true` creates a fresh session and rotates the `agent_session` cookie.
@@ -59,7 +59,7 @@ Provide a capable AI agent through a public demo API so users can test it withou
 - AC17: The ingestion job extracts `.doc`, `.docx`, `.pdf`, `.pptx`, `.xlsx`, `.txt`, `.json`, `.msg`, `.vsdx`, `.jpg`, `.jpeg`, `.png`, and `.mp4` files. It uses parsers for office/text formats, Textract for images, and Transcribe for video audio; extraction failures are counted and reported without logging document contents.
 - AC18: Extracted text is chunked, embedded with Amazon Titan Text Embeddings V2 at 1024 dimensions, and indexed as `float32` vectors with cosine distance and source-key/page/slide/sheet metadata.
 - AC19: The agent has a `search_iasa_knowledge` tool that embeds a query with Titan, retrieves relevant S3 Vectors matches, and supplies their text and source references to Nova Pro. The agent must distinguish retrieved evidence from unsupported claims.
-- AC20: Anonymous users can query this corpus through the throttled `/agent/invoke` endpoint; retrieved text is intentionally public and is never returned from a raw S3 object URL.
+- AC20: Signed-in users can query this corpus through the throttled `/agent/invoke` endpoint; retrieved text is never returned from a raw S3 object URL.
 
 ## Non-functional
 
@@ -67,13 +67,13 @@ Provide a capable AI agent through a public demo API so users can test it withou
 - Prompts, responses, raw cookies, and session IDs are not logged; log a non-reversible session correlation value, status, latency, and token counts.
 - Tool access is least privilege: the agent only reaches Gateway targets listed in Terraform.
 - Web browsing and code execution run only in AgentCore sandboxes.
-- The anonymous endpoint has route-level throttling; anonymous access can incur model and tool costs.
+- The endpoint has route-level throttling; invocation can incur model and tool costs.
 - Source objects remain private in the dedicated bucket; only the ingestion process and designated agent components receive least-privilege access.
-- The corpus is approved for anonymous retrieval; do not upload additional private material without reviewing that exposure.
+- The corpus is approved for retrieval by signed-in users; do not upload additional private material without reviewing that exposure.
 
 ## Out of scope
 
-- Cognito authentication, user provisioning, and cross-session personal memory.
+- Cognito/SMS user provisioning is specified in spec 004; cross-session personal memory is out of scope.
 - Public direct access to AgentCore Runtime or streaming responses.
 - AWS Bedrock Knowledge Bases, Aurora/RDS vector stores, front-end UI implementation, and multi-tenant billing.
 

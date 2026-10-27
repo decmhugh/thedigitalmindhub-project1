@@ -63,6 +63,15 @@
     .composer { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; padding: 16px 18px; border-top: 1px solid var(--line); }
     .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 140px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); }
     .composer .primary { min-width: 82px; }
+    .auth { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 14px; max-width: 360px; margin: 0 auto; padding: 32px 24px; }
+    .auth[hidden], .chat-view[hidden], #sign-out-button[hidden] { display: none; }
+    .auth-form { display: flex; flex-direction: column; gap: 10px; }
+    .auth h2 { margin: 0; font-family: Georgia, serif; font-size: 24px; font-weight: 400; }
+    .auth p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .auth input { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); }
+    .auth input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 89, 0.12); }
+    .auth-error { color: var(--coral); min-height: 1.2em; }
+    .chat-view { display: flex; flex: 1; min-height: 0; flex-direction: column; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     @media (max-width: 720px) {
       .shell { width: min(100% - 20px, 560px); padding-top: 16px; }
@@ -107,8 +116,33 @@
             <p class="chat-title">Conversation</p>
             <p id="session-label" class="session-label">New session</p>
           </div>
-          <button id="new-session-button" class="secondary" type="button">New session</button>
+          <div>
+            <button id="new-session-button" class="secondary" type="button">New session</button>
+            <button id="sign-out-button" class="secondary" type="button" hidden>Sign out</button>
+          </div>
         </header>
+        <div id="auth-phone-view" class="auth" hidden>
+          <h2>Sign in</h2>
+          <p>Enter your mobile number with country code and we will text you a code.</p>
+          <form id="phone-form" class="auth-form">
+            <label class="sr-only" for="phone">Mobile number</label>
+            <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+353 85 123 4567" required>
+            <button id="phone-button" class="primary" type="submit">Send code</button>
+          </form>
+          <p id="phone-error" class="auth-error" role="alert"></p>
+        </div>
+        <div id="auth-code-view" class="auth" hidden>
+          <h2>Enter your code</h2>
+          <p>We sent a 6-digit code by SMS. It expires in 5 minutes.</p>
+          <form id="code-form" class="auth-form">
+            <label class="sr-only" for="code">Verification code</label>
+            <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456" required>
+            <button id="code-button" class="primary" type="submit">Verify</button>
+            <button id="change-number-button" class="secondary" type="button">Use a different number</button>
+          </form>
+          <p id="code-error" class="auth-error" role="alert"></p>
+        </div>
+        <div id="chat-view" class="chat-view" hidden>
         <div id="messages" aria-live="polite" aria-relevant="additions text">
           <p id="empty-state" class="empty-state">Your conversation will appear here.</p>
         </div>
@@ -117,6 +151,7 @@
           <textarea id="prompt" placeholder="Write a message…" rows="1" required></textarea>
           <button id="send-button" class="primary" type="submit">Send</button>
         </form>
+        </div>
       </section>
     </main>
   </div>
@@ -126,6 +161,67 @@
       const emptyState = "Your conversation will appear here.";
       let startNewSession = false;
       let isSending = false;
+      let phoneNumber = "";
+
+      function show(view) {
+        $("#auth-phone-view").prop("hidden", view !== "phone");
+        $("#auth-code-view").prop("hidden", view !== "code");
+        $("#chat-view").prop("hidden", view !== "chat");
+        $("#new-session-button, #sign-out-button").prop("hidden", view !== "chat");
+        $("#session-label").text(view === "chat" ? "New session" : "Signed out");
+        $("#status-label").text(view === "chat" ? "Ready" : "Sign in required");
+        $("#status-dot").toggleClass("is-online", view === "chat");
+        $(view === "phone" ? "#phone" : view === "code" ? "#code" : "#prompt").trigger("focus");
+      }
+
+      function authFailure(xhr, target) {
+        const message = xhr.status === 429
+          ? "Too many requests. Please wait a moment and try again."
+          : xhr.status === 401
+            ? "That code is invalid or has expired."
+            : xhr.status === 400
+              ? "Please check the details and try again."
+              : "Something went wrong. Try again.";
+        $(target).text(message);
+      }
+
+      $("#phone-form").on("submit", function (event) {
+        event.preventDefault();
+        phoneNumber = $("#phone").val().replace(/[\s()-]/g, "");
+        $("#phone-error").text("");
+        $("#phone-button").prop("disabled", true);
+        $.ajax({ url: "/auth/start", method: "POST", contentType: "application/json", data: JSON.stringify({ phone: phoneNumber }) })
+          .done(function () { show("code"); })
+          .fail(function (xhr) { authFailure(xhr, "#phone-error"); })
+          .always(function () { $("#phone-button").prop("disabled", false); });
+      });
+
+      $("#code-form").on("submit", function (event) {
+        event.preventDefault();
+        $("#code-error").text("");
+        $("#code-button").prop("disabled", true);
+        $.ajax({ url: "/auth/verify", method: "POST", contentType: "application/json", data: JSON.stringify({ phone: phoneNumber, code: $("#code").val().trim() }) })
+          .done(function () { $("#code").val(""); show("chat"); })
+          .fail(function (xhr) { authFailure(xhr, "#code-error"); })
+          .always(function () { $("#code-button").prop("disabled", false); });
+      });
+
+      $("#change-number-button").on("click", function () {
+        $("#code").val("");
+        $("#code-error").text("");
+        show("phone");
+      });
+
+      $("#sign-out-button").on("click", function () {
+        $.ajax({ url: "/auth/logout", method: "POST" }).always(function () {
+          $("#messages").empty().append($("<p>").attr("id", "empty-state").addClass("empty-state").text(emptyState));
+          show("phone");
+        });
+      });
+
+      $.ajax({ url: "/auth/session", method: "GET", cache: false })
+        .done(function () { show("chat"); })
+        .fail(function () { show("phone"); });
 
       function addMessage(kind, text) {
         $("#empty-state").remove();
@@ -160,6 +256,10 @@
           $("#session-label").text("Session active");
           addMessage("agent", result.response);
         }).fail(function (xhr) {
+          if (xhr.status === 401) {
+            show("phone");
+            return;
+          }
           const message = xhr.status === 429
             ? "Too many requests. Please wait a moment and try again."
             : "The agent could not complete that request. Try again.";

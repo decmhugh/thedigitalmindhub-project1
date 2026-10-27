@@ -22,6 +22,18 @@ variable "agent_html_key" {
   default = "html/agent.html"
 }
 
+variable "sms_sender_id" {
+  type        = string
+  default     = "SERV"
+  description = "Registered SMS sender ID used to send sign-in codes."
+}
+
+variable "sms_sender_country" {
+  type        = string
+  default     = "IE"
+  description = "ISO country code the sender ID is registered for."
+}
+
 variable "agent_container_image_uri" {
   type        = string
   default     = ""

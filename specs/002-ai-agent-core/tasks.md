@@ -16,5 +16,9 @@
 - [ ] T13 Run pytest, Terraform fmt/validate, tflint, and checkov
 - [ ] T14 Review the Terraform plan; wait for explicit apply approval
 - [ ] T15 After approved apply, run the anonymous invoke smoke test
-- [ ] T16 Add encrypted S3 Vectors bucket and empty Titan-compatible index (AC15)
-- [ ] T17 Test Terraform plan/schema for vector resources; confirm no ingestion or runtime vector permissions (AC16)
+- [ ] T16 Add new private IASA source bucket and separate encrypted S3 Vectors bucket/index (AC15)
+- [ ] T17 Build one-time IASA upload/ingestion for all specified file types, Titan embeddings, chunking, and source metadata (AC16-AC18)
+- [ ] T18 Add `search_iasa_knowledge` tool and scoped runtime query/embedding IAM permissions (AC19)
+- [ ] T19 Test parsers, chunking, embedding payloads, vector writes/queries, and source references with mocks
+- [ ] T20 Review Terraform plan; verify no changes to existing Knowledge Bases, Aurora/RDS, or state bucket
+- [ ] T21 After apply approval, upload/index IASA corpus and run anonymous retrieval smoke test (AC20)

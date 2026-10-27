@@ -18,7 +18,25 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 5
   }
 
-  depends_on = [module.agent_invoke]
+  route_settings {
+    route_key              = "ANY /agent/mcp"
+    throttling_rate_limit  = 2
+    throttling_burst_limit = 5
+  }
+
+  route_settings {
+    route_key              = "POST /auth/start"
+    throttling_rate_limit  = 2
+    throttling_burst_limit = 5
+  }
+
+  route_settings {
+    route_key              = "POST /auth/verify"
+    throttling_rate_limit  = 2
+    throttling_burst_limit = 5
+  }
+
+  depends_on = [module.agent_invoke, module.agent_mcp, module.auth_start, module.auth_verify]
 }
 
 module "hello" {

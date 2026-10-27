@@ -16,6 +16,8 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
 COOKIE_NAME = "agent_session"
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9-]{33,128}$")
+AUTH_COOKIE_NAME = "auth_session"
+AUTH_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
 
 
 def _response(status_code: int, body: dict[str, Any], cookies: list[str] | None = None) -> dict[str, Any]:
@@ -50,6 +52,18 @@ def _cookie_session(event: dict[str, Any]) -> str | None:
         name, _, value = cookie.strip().partition("=")
         if name == COOKIE_NAME and SESSION_PATTERN.match(value):
             return value
+    return None
+
+
+def _authenticated_user(event: dict[str, Any]) -> str | None:
+    """Return the signed-in user's phone hash for a valid auth_session cookie."""
+    for cookie in event.get("cookies") or []:
+        name, _, value = cookie.strip().partition("=")
+        if name == AUTH_COOKIE_NAME and AUTH_TOKEN_PATTERN.match(value):
+            key = {"pk": {"S": "SESSION#" + hashlib.sha256(value.encode("utf-8")).hexdigest()}}
+            item = boto3.client("dynamodb").get_item(TableName=os.environ["AUTH_TABLE"], Key=key).get("Item")
+            if item and int(item["expires_at"]["N"]) > int(time.time()):
+                return item["phone_hash"]["S"]
     return None
 
 
@@ -102,6 +116,14 @@ def _log(session_id: str, status: int, started: float, error: Exception | None =
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     started = time.monotonic()
+    try:
+        user = _authenticated_user(event)
+    except (BotoCoreError, ClientError, KeyError, ValueError, OSError) as error:
+        logger.warning(json.dumps({"status": 502, "error_type": type(error).__name__}))
+        return _response(502, {"error": "Agent request failed"})
+    if user is None:
+        return _response(401, {"error": "Sign in required"})
+
     body = _body(event)
     if body is None or not isinstance(body.get("prompt"), str) or not body["prompt"].strip():
         return _response(400, {"error": "A non-empty prompt is required"})
@@ -115,12 +137,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         session_id = str(uuid.uuid4())
         cookies = [_session_cookie(session_id)]
 
+    runtime_session_id = hashlib.sha256(f"{user}:{session_id}".encode("utf-8")).hexdigest()
     try:
         parameter_name = os.environ["AGENT_RUNTIME_ARN_PARAM"]
         runtime_arn = boto3.client("ssm").get_parameter(Name=parameter_name, WithDecryption=False)["Parameter"]["Value"]
         result = boto3.client("bedrock-agentcore").invoke_agent_runtime(
             agentRuntimeArn=runtime_arn,
-            runtimeSessionId=session_id,
+            runtimeSessionId=runtime_session_id,
             payload=json.dumps({"prompt": body["prompt"]}).encode("utf-8"),
             qualifier="DEFAULT",
         )

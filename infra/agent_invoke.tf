@@ -23,6 +23,11 @@ data "aws_iam_policy_document" "agent_invoke" {
     actions   = ["ssm:GetParameter"]
     resources = ["arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.agent_ssm_name}"]
   }
+
+  statement {
+    actions   = ["dynamodb:GetItem"]
+    resources = [aws_dynamodb_table.auth.arn]
+  }
 }
 
 module "agent_invoke" {
@@ -36,6 +41,7 @@ module "agent_invoke" {
   memory_size  = 256
   environment = {
     AGENT_RUNTIME_ARN_PARAM = local.agent_ssm_name
+    AUTH_TABLE              = aws_dynamodb_table.auth.name
     LOG_LEVEL               = "INFO"
   }
   enable_custom_policy = true

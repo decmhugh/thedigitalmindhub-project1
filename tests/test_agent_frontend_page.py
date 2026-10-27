@@ -15,10 +15,21 @@ def test_page_uses_pinned_jquery_cdn(html):
     assert 'integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="' in html
 
 
-def test_page_has_no_login_ui_or_cognito(html):
+def test_page_has_no_password_cognito_or_token_handling(html):
     lowered = html.lower()
-    for marker in ("sign-in", "sign in", "sign out", "password", "username", "cognito", "authorization", "idtoken"):
+    for marker in ("password", "cognito", "authorization", "idtoken", "bearer"):
         assert marker not in lowered
+
+
+def test_page_implements_sms_sign_in_flow(html):
+    for marker in ('"/auth/session"', '"/auth/start"', '"/auth/verify"', '"/auth/logout"'):
+        assert marker in html
+    assert 'id="phone"' in html and 'id="code"' in html
+    assert "phone" in html and "code" in html
+
+
+def test_page_returns_to_sign_in_on_401(html):
+    assert "401" in html
 
 
 def test_chat_is_enabled_on_load(html):

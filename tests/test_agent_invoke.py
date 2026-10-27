@@ -1,5 +1,7 @@
+import hashlib
 import io
 import json
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -9,17 +11,30 @@ from src.agent_invoke import handler
 
 RUNTIME_ARN = "arn:aws:bedrock-agentcore:eu-west-1:123456789012:runtime/test"
 SESSION = "a" * 36
+AUTH_TOKEN = "B" * 43
+AUTH_COOKIE = f"auth_session={AUTH_TOKEN}"
+PHONE_HASH = "p" * 64
 
 
-def api_event(body, cookie=None):
+def runtime_session(agent_session):
+    return hashlib.sha256(f"{PHONE_HASH}:{agent_session}".encode()).hexdigest()
+
+
+def api_event(body, cookie=None, authed=True):
     event = {"body": body, "requestContext": {}}
-    if cookie:
-        event["cookies"] = [cookie]
+    cookies = ([AUTH_COOKIE] if authed else []) + ([cookie] if cookie else [])
+    if cookies:
+        event["cookies"] = cookies
     return event
 
 
-def configure_clients(monkeypatch, runtime_response=None, runtime_error=None):
+def configure_clients(monkeypatch, runtime_response=None, runtime_error=None, session_item="default"):
     monkeypatch.setenv("AGENT_RUNTIME_ARN_PARAM", "/test/agent/runtime-arn")
+    monkeypatch.setenv("AUTH_TABLE", "auth-table")
+    ddb = Mock()
+    if session_item == "default":
+        session_item = {"phone_hash": {"S": PHONE_HASH}, "expires_at": {"N": str(int(time.time()) + 100)}}
+    ddb.get_item.return_value = {"Item": session_item} if session_item else {}
     ssm = Mock()
     ssm.get_parameter.return_value = {"Parameter": {"Value": RUNTIME_ARN}}
     runtime = Mock()
@@ -29,7 +44,8 @@ def configure_clients(monkeypatch, runtime_response=None, runtime_error=None):
         runtime.invoke_agent_runtime.return_value = runtime_response or {
             "response": io.BytesIO(b'{"response":"Hello from agent"}'),
         }
-    factory = Mock(side_effect=lambda service, **kwargs: {"ssm": ssm, "bedrock-agentcore": runtime}[service])
+    factory = Mock(side_effect=lambda service, **kwargs: {"ssm": ssm, "bedrock-agentcore": runtime, "dynamodb": ddb}[service])
+    runtime.ddb = ddb
     return runtime, patch.object(handler.boto3, "client", factory)
 
 
@@ -56,7 +72,7 @@ def test_first_request_sets_browser_session_cookie_without_exposing_id(monkeypat
     assert session_id not in result["body"]
     call = runtime.invoke_agent_runtime.call_args.kwargs
     assert call["agentRuntimeArn"] == RUNTIME_ARN
-    assert call["runtimeSessionId"] == session_id
+    assert call["runtimeSessionId"] == runtime_session(session_id)
     assert json.loads(call["payload"]) == {"prompt": "hello"}
 
 
@@ -67,7 +83,7 @@ def test_existing_cookie_session_is_reused_without_new_cookie(monkeypatch):
 
     assert result["statusCode"] == 200
     assert "cookies" not in result
-    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] == SESSION
+    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] == runtime_session(SESSION)
 
 
 def test_new_session_flag_rotates_cookie(monkeypatch):
@@ -79,7 +95,7 @@ def test_new_session_flag_rotates_cookie(monkeypatch):
 
     new_id = session_cookie(result).split(";")[0].split("=", 1)[1]
     assert new_id != SESSION
-    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] == new_id
+    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] == runtime_session(new_id)
 
 
 def test_malformed_cookie_is_replaced(monkeypatch):
@@ -91,22 +107,14 @@ def test_malformed_cookie_is_replaced(monkeypatch):
     assert new_id != "short" and len(new_id) >= 33
 
 
-def test_request_needs_no_authorization(monkeypatch):
-    _, client_patch = configure_clients(monkeypatch)
-    with client_patch:
-        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
-
-    assert result["statusCode"] == 200
-
-
 @pytest.mark.parametrize("body", ["not json", "{}", '{"prompt":"  "}', "null", '{"prompt":"hi","new_session":"yes"}'])
-def test_invalid_body_returns_400_without_aws_calls(monkeypatch, body):
-    _, client_patch = configure_clients(monkeypatch)
-    with client_patch as client_factory:
+def test_invalid_body_returns_400_without_invoking_runtime(monkeypatch, body):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
         result = handler.lambda_handler(api_event(body), None)
 
     assert result["statusCode"] == 400
-    client_factory.assert_not_called()
+    runtime.invoke_agent_runtime.assert_not_called()
 
 
 def test_agentcore_timeout_returns_504_without_internal_details(monkeypatch):
@@ -180,3 +188,34 @@ def test_logs_do_not_contain_session_id_or_prompt(monkeypatch, caplog):
 
     assert SESSION not in caplog.text
     assert "secret prompt" not in caplog.text
+
+
+def test_missing_auth_cookie_returns_401_without_any_aws_call(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch as client_factory:
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}', authed=False), None)
+
+    assert result["statusCode"] == 401
+    assert "cookies" not in result
+    client_factory.assert_not_called()
+
+
+@pytest.mark.parametrize("session_item", [None, {"phone_hash": {"S": "x"}, "expires_at": {"N": "1"}}])
+def test_unknown_or_expired_session_returns_401_without_invoking_runtime(monkeypatch, session_item):
+    runtime, client_patch = configure_clients(monkeypatch, session_item=session_item)
+    with client_patch:
+        result = handler.lambda_handler(api_event('{"prompt":"hello"}'), None)
+
+    assert result["statusCode"] == 401
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_runtime_session_is_bound_to_user(monkeypatch):
+    other = {"phone_hash": {"S": "q" * 64}, "expires_at": {"N": str(int(time.time()) + 100)}}
+    runtime, client_patch = configure_clients(monkeypatch, session_item=other)
+    with client_patch:
+        handler.lambda_handler(api_event('{"prompt":"hello"}', f"agent_session={SESSION}"), None)
+
+    assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] != runtime_session(SESSION)
+    key = {"pk": {"S": "SESSION#" + hashlib.sha256(AUTH_TOKEN.encode()).hexdigest()}}
+    assert runtime.ddb.get_item.call_args.kwargs["Key"] == key
