@@ -1,5 +1,11 @@
 # Agent harness: observability, evals, Harness.io
 
+## Deploy everything
+
+`./deploy.ps1 [-BuildImage] [-RunEvals] [-Harness] [-SkipChecks] [-SkipApply] [-Profile <name>]`
+
+Runs tests and Terraform checks, optionally builds the agent image (S3 upload + CodeBuild), plans, waits for you to type `APPLY`, applies, uploads changed HTML, enables Transaction Search, and optionally runs the evals and syncs/triggers the Harness pipeline (needs `HARNESS_API_KEY`, `HARNESS_ACCOUNT_ID`, `HARNESS_ORG`, `HARNESS_PROJECT` in the environment). The manual steps below are then only for reference.
+
 ## Observability (AgentCore traces in AWS)
 
 1. Rebuild and deploy the agent image (`scripts/build-agent-image.ps1`, then set `agent_container_image_uri`). The image now runs under `opentelemetry-instrument`.

@@ -41,4 +41,4 @@ if ($status -ne "SUCCEEDED") {
 }
 
 Write-Host "TAG: $tag"
-Write-Host "IMAGE: $account.dkr.ecr.$Region.amazonaws.com/project1-dev-agent:$tag"
+Write-Output "$account.dkr.ecr.$Region.amazonaws.com/project1-dev-agent:$tag"
