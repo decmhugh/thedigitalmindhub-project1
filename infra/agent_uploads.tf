@@ -95,6 +95,8 @@ module "agent_upload_url" {
   route_key    = "POST /agent/upload-url"
   api_id       = aws_apigatewayv2_api.this.id
   api_exec_arn = aws_apigatewayv2_api.this.execution_arn
+  timeout      = 10
+  memory_size  = 256
   environment = {
     UPLOAD_BUCKET = aws_s3_bucket.agent_uploads.bucket
     AUTH_TABLE    = aws_dynamodb_table.auth.name

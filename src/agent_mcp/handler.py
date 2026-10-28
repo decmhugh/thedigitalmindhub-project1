@@ -7,9 +7,11 @@ import re
 import secrets
 import time
 import uuid
+from decimal import Decimal
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, ConnectTimeoutError, ReadTimeoutError
 
 logger = logging.getLogger()
@@ -130,7 +132,9 @@ def _active_session(table: Any, session_id: str) -> dict[str, Any] | None:
     if not isinstance(item, dict):
         return None
     now = int(time.time())
-    if not isinstance(item.get("expires_at"), (int, float)) or item["expires_at"] <= now:
+    expires_at = item.get("expires_at")
+    # DynamoDB returns numbers as Decimal.
+    if not isinstance(expires_at, (int, float, Decimal)) or isinstance(expires_at, bool) or expires_at <= now:
         table.delete_item(Key={"session_id": session_id})
         return None
     table.update_item(
@@ -446,7 +450,10 @@ def _upload_url(arguments: dict[str, Any], session_id: str) -> dict[str, Any] | 
     ):
         return None
     key = _owner_prefix(session_id) + uuid.uuid4().hex
-    post = boto3.client("s3").generate_presigned_post(
+    post = boto3.client(
+        "s3",
+        config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
+    ).generate_presigned_post(
         Bucket=os.environ["UPLOAD_BUCKET"],
         Key=key,
         Fields={"Content-Type": media_type, "x-amz-server-side-encryption": "AES256"},

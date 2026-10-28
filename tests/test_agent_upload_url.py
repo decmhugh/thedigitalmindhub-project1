@@ -58,6 +58,28 @@ def test_returns_presigned_post_scoped_to_caller(monkeypatch):
     assert ["content-length-range", 1, 1000] in call["Conditions"]
 
 
+def test_presigned_post_targets_the_regional_s3_endpoint(monkeypatch):
+    # The global endpoint redirects POSTs for regional buckets, which browsers reject under CORS.
+    _, _ = configure(monkeypatch)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")
+    real_client = handler.boto3.client
+    ddb = Mock()
+    ddb.get_item.return_value = {
+        "Item": {"phone_hash": {"S": PHONE_HASH}, "expires_at": {"N": str(int(time.time()) + 100)}}
+    }
+
+    def factory(service, **kwargs):
+        return ddb if service == "dynamodb" else real_client(service, **kwargs)
+
+    with patch.object(handler.boto3, "client", factory):
+        result = handler.lambda_handler(api_event(body()), None)
+
+    assert result["statusCode"] == 200
+    assert json.loads(result["body"])["url"] == "https://test-uploads.s3.eu-west-1.amazonaws.com/"
+
+
 def test_documents_are_allowed(monkeypatch):
     _, client_patch = configure(monkeypatch)
     with client_patch:

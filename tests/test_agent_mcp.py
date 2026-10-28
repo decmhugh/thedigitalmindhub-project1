@@ -166,6 +166,25 @@ def test_get_upload_url_returns_session_scoped_presigned_post(monkeypatch):
     runtime.invoke_agent_runtime.assert_not_called()
 
 
+def test_get_upload_url_targets_the_regional_s3_endpoint(monkeypatch):
+    # The global endpoint redirects POSTs for regional buckets, which breaks browser CORS uploads.
+    table, _, client_patch, resource_patch = configure_clients(monkeypatch)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")
+    real_client = handler.boto3.client
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        handler.boto3.client = lambda service, **kwargs: (
+            real_client(service, **kwargs) if service == "s3" else Mock()
+        )
+        result = call_tool(session_id, "get_upload_url", {"mediaType": "image/png", "size": 1000})
+
+    assert rpc_response(result)["result"]["structuredContent"]["url"] == (
+        "https://test-uploads.s3.eu-west-1.amazonaws.com/"
+    )
+
+
 @pytest.mark.parametrize(
     "arguments",
     [
@@ -534,6 +553,22 @@ def test_session_activity_renews_expiry_and_expired_session_is_rejected(monkeypa
     assert renewed_expiry > first_expiry
     assert expired["statusCode"] == 404
     runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_session_expiry_stored_as_decimal_by_dynamodb_is_accepted(monkeypatch):
+    from decimal import Decimal
+
+    table, _, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        table.items[session_id]["expires_at"] = Decimal(table.items[session_id]["expires_at"])
+        result = handler.lambda_handler(
+            event("POST", {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, session_id),
+            None,
+        )
+
+    assert result["statusCode"] == 200
+    assert rpc_response(result)["result"]["tools"]
 
 
 def test_delete_terminates_only_the_selected_session(monkeypatch):

@@ -6,4 +6,4 @@
 - [x] T4 Run pytest, `terraform fmt`, `terraform validate`.
 - [x] T5 Generate the plan with `AWS_PROFILE=project1-dev`; show it; do not apply (AC6).
 - [x] T6 After explicit apply approval, run the script, confirm the tag in ECR.
-- [ ] T7 Set `agent_container_image_uri` to the new tag, plan, and get approval before applying the runtime update (AC6).
+- [x] T7 Set `agent_container_image_uri` to the new tag, plan, and get approval before applying the runtime update (AC6).

@@ -9,6 +9,7 @@ import uuid
 from typing import Any
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger()
@@ -88,7 +89,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     key = owner_prefix(user) + uuid.uuid4().hex
     try:
-        post = boto3.client("s3").generate_presigned_post(
+        post = boto3.client(
+            "s3",
+            config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
+        ).generate_presigned_post(
             Bucket=os.environ["UPLOAD_BUCKET"],
             Key=key,
             Fields={"Content-Type": media_type, "x-amz-server-side-encryption": ENCRYPTION},
