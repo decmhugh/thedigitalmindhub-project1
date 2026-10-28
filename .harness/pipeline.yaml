@@ -1,0 +1,58 @@
+pipeline:
+  name: project1-infra-checks
+  identifier: project1_infra_checks
+  # Set projectIdentifier / orgIdentifier on import. Runs on the existing delegate (its AWS role is used; no secrets here).
+  stages:
+    - stage:
+        name: Checks
+        identifier: checks
+        type: CI
+        spec:
+          cloneCodebase: true
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Unit tests
+                  identifier: unit_tests
+                  spec:
+                    shell: Bash
+                    command: |
+                      pip install -r requirements-dev.txt
+                      pytest tests
+              - step:
+                  type: Run
+                  name: Terraform format and validate
+                  identifier: tf_validate
+                  spec:
+                    shell: Bash
+                    command: |
+                      terraform -chdir=infra fmt -check -recursive
+                      terraform -chdir=infra init -backend=false
+                      terraform -chdir=infra validate
+              - step:
+                  type: Run
+                  name: Lint and security scan
+                  identifier: lint_scan
+                  spec:
+                    shell: Bash
+                    command: |
+                      tflint --chdir=infra
+                      checkov -d infra
+    - stage:
+        name: Plan
+        identifier: plan
+        type: CI
+        spec:
+          cloneCodebase: true
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Terraform plan
+                  identifier: tf_plan
+                  spec:
+                    shell: Bash
+                    command: |
+                      terraform -chdir=infra init
+                      terraform -chdir=infra plan -var-file=env/dev.tfvars -lock-timeout=60s -no-color

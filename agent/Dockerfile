@@ -16,4 +16,4 @@ USER appuser
 
 EXPOSE 8080
 
-CMD ["python", "-m", "agent.app"]
+CMD ["opentelemetry-instrument", "python", "-m", "agent.app"]

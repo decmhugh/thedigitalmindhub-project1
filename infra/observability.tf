@@ -109,6 +109,23 @@ resource "aws_cloudwatch_dashboard" "agent" {
           query  = "SOURCE '/aws/lambda/${local.agent_invoke_function}' | fields @timestamp, status, latency_ms | filter ispresent(status) | sort @timestamp desc | limit 20"
         }
       },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 12
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Agent eval pass rate (%)"
+          region = var.region
+          stat   = "Average"
+          period = 3600
+          view   = "timeSeries"
+          metrics = [
+            [local.agent_evals_namespace, "PassRate"],
+          ]
+        }
+      },
     ]
   })
 }

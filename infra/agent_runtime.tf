@@ -163,6 +163,12 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     GUARDRAIL_VERSION = aws_bedrock_guardrail_version.agent.version
     MEMORY_ID         = aws_bedrockagentcore_memory.agent.id
     GATEWAY_URL       = aws_bedrockagentcore_gateway.agent.gateway_url
+
+    AGENT_OBSERVABILITY_ENABLED = "true"
+    OTEL_PYTHON_DISTRO          = "aws_distro"
+    OTEL_PYTHON_CONFIGURATOR    = "aws_configurator"
+    OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+    OTEL_TRACES_EXPORTER        = "otlp"
   })
 
   network_configuration {
