@@ -1,0 +1,190 @@
+﻿module.hello.data.archive_file.zip: Reading...
+module.auth_logout.data.archive_file.zip: Reading...
+module.auth_verify.data.archive_file.zip: Reading...
+module.agent_frontend.data.archive_file.zip: Reading...
+module.auth_start.data.archive_file.zip: Reading...
+module.agent_mcp.data.archive_file.zip: Reading...
+module.auth_session.data.archive_file.zip: Reading...
+module.agent_upload_url.data.archive_file.zip: Reading...
+module.agent_invoke.data.archive_file.zip: Reading...
+module.auth_logout.data.archive_file.zip: Read complete after 0s [id=62a964dece1a0d73f1608e396ead562a53959290]
+module.agent_upload_url.data.archive_file.zip: Read complete after 0s [id=b9012aa03d781d8f6830758200b8ddd7d2fe75a4]
+module.auth_start.data.archive_file.zip: Read complete after 0s [id=70a1f49353400aca6031c42cbcf8ab3a2150fc98]
+module.agent_frontend.data.archive_file.zip: Read complete after 0s [id=101a4949e9256d522ff557508eb7fa6f52dc421f]
+module.auth_session.data.archive_file.zip: Read complete after 0s [id=d6f4d128ca19e2222c9bc568db3855c872583177]
+module.hello.data.archive_file.zip: Read complete after 0s [id=4304a268d1b8e5a66be184a3c44fe015709980b1]
+module.auth_verify.data.archive_file.zip: Read complete after 0s [id=ab6647ef3edb12c49949cd31e8d0dbd1de203e6d]
+module.agent_invoke.data.archive_file.zip: Read complete after 0s [id=c633e4c654881f35a2676e6e4f16c675099a81b4]
+random_password.auth_pepper: Refreshing state... [id=none]
+module.agent_mcp.data.archive_file.zip: Read complete after 0s [id=a69ac9a20208e5a0f9d8f62b5b99ec8d34f6f955]
+module.auth_start.data.aws_iam_policy_document.assume: Reading...
+module.hello.data.aws_iam_policy_document.assume: Reading...
+module.agent_upload_url.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-agent-upload-url]
+module.agent_mcp.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-agent-mcp]
+module.auth_session.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-auth-session]
+module.auth_session.data.aws_iam_policy_document.assume: Reading...
+module.hello.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-hello]
+aws_ssm_parameter.auth_pepper: Refreshing state... [id=/project1/dev/auth/pepper]
+aws_cloudwatch_metric_alarm.agent_invoke_errors: Refreshing state... [id=project1-dev-agent-invoke-errors]
+module.hello.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+module.auth_start.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+module.auth_session.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+aws_dynamodb_table.agent_mcp_sessions: Refreshing state... [id=project1-dev-agent-mcp-sessions]
+data.aws_caller_identity.current: Reading...
+module.agent_invoke.data.aws_iam_policy_document.assume: Reading...
+module.agent_invoke.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+module.agent_frontend.data.aws_iam_policy_document.assume: Reading...
+module.agent_frontend.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+module.auth_verify.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-auth-verify]
+aws_bedrock_guardrail.agent: Refreshing state... [name=project1-dev-agent]
+data.aws_caller_identity.current: Read complete after 0s [id=586794455900]
+aws_dynamodb_table.auth: Refreshing state... [id=project1-dev-auth]
+module.agent_upload_url.data.aws_iam_policy_document.assume: Reading...
+module.agent_upload_url.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+aws_ecr_repository.agent: Refreshing state... [id=project1-dev-agent]
+data.aws_partition.current: Reading...
+data.aws_partition.current: Read complete after 0s [id=aws]
+module.agent_mcp.data.aws_iam_policy_document.assume: Reading...
+module.agent_mcp.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+aws_apigatewayv2_api.this: Refreshing state... [id=n4n43o6th0]
+module.auth_logout.data.aws_iam_policy_document.assume: Reading...
+data.aws_iam_policy_document.agent_runtime_assume_role: Reading...
+module.auth_logout.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-auth-logout]
+aws_bedrockagentcore_memory.agent: Refreshing state... [id=project1_dev_agent_memory-asvbfA85nC]
+module.auth_logout.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+data.aws_iam_policy_document.agent_runtime_assume_role: Read complete after 0s [id=4217861921]
+module.agent_frontend.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-agent-frontend]
+module.auth_start.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-auth-start]
+module.auth_verify.data.aws_iam_policy_document.assume: Reading...
+data.aws_iam_policy_document.agent_gateway_assume: Reading...
+module.agent_invoke.aws_cloudwatch_log_group.this: Refreshing state... [id=/aws/lambda/project1-dev-agent-invoke]
+data.aws_iam_policy_document.agent_gateway_assume: Read complete after 0s [id=4217861921]
+module.auth_verify.data.aws_iam_policy_document.assume: Read complete after 0s [id=2690255455]
+module.hello.aws_iam_role.this: Refreshing state... [id=project1-dev-hello]
+module.auth_start.aws_iam_role.this: Refreshing state... [id=project1-dev-auth-start]
+module.auth_session.aws_iam_role.this: Refreshing state... [id=project1-dev-auth-session]
+module.agent_invoke.aws_iam_role.this: Refreshing state... [id=project1-dev-agent-invoke]
+module.agent_frontend.aws_iam_role.this: Refreshing state... [id=project1-dev-agent-frontend]
+aws_s3_bucket.agent_uploads: Refreshing state... [id=project1-dev-agent-uploads-586794455900]
+module.auth_session.data.aws_iam_policy_document.logs: Reading...
+module.agent_upload_url.aws_iam_role.this: Refreshing state... [id=project1-dev-agent-upload-url]
+module.auth_session.data.aws_iam_policy_document.logs: Read complete after 0s [id=2301736092]
+data.aws_iam_policy_document.agent_frontend_s3: Reading...
+data.aws_iam_policy_document.agent_frontend_s3: Read complete after 0s [id=4222075073]
+module.agent_mcp.aws_iam_role.this: Refreshing state... [id=project1-dev-agent-mcp]
+module.agent_upload_url.data.aws_iam_policy_document.logs: Reading...
+module.agent_upload_url.data.aws_iam_policy_document.logs: Read complete after 0s [id=4153948023]
+module.agent_mcp.data.aws_iam_policy_document.logs: Reading...
+module.agent_mcp.data.aws_iam_policy_document.logs: Read complete after 0s [id=1684947787]
+module.auth_verify.data.aws_iam_policy_document.logs: Reading...
+module.auth_verify.data.aws_iam_policy_document.logs: Read complete after 0s [id=43693094]
+module.hello.data.aws_iam_policy_document.logs: Reading...
+module.hello.data.aws_iam_policy_document.logs: Read complete after 0s [id=3163384408]
+module.auth_logout.aws_iam_role.this: Refreshing state... [id=project1-dev-auth-logout]
+aws_iam_role.agent_runtime: Refreshing state... [id=project1-dev-agentcore-runtime]
+module.auth_logout.data.aws_iam_policy_document.logs: Reading...
+module.auth_logout.data.aws_iam_policy_document.logs: Read complete after 0s [id=2976416874]
+module.agent_frontend.data.aws_iam_policy_document.logs: Reading...
+module.agent_frontend.data.aws_iam_policy_document.logs: Read complete after 0s [id=1618592975]
+module.auth_verify.aws_iam_role.this: Refreshing state... [id=project1-dev-auth-verify]
+aws_iam_role.agent_gateway: Refreshing state... [id=project1-dev-agentcore-gateway]
+module.auth_start.data.aws_iam_policy_document.logs: Reading...
+module.auth_start.data.aws_iam_policy_document.logs: Read complete after 0s [id=901903041]
+module.agent_invoke.data.aws_iam_policy_document.logs: Reading...
+module.agent_invoke.data.aws_iam_policy_document.logs: Read complete after 0s [id=877199163]
+data.aws_iam_policy_document.agent_runtime_ecr: Reading...
+data.aws_iam_policy_document.agent_runtime_ecr: Read complete after 0s [id=3775733631]
+aws_bedrock_guardrail_version.agent: Refreshing state...
+aws_s3_bucket_server_side_encryption_configuration.agent_uploads: Refreshing state... [id=project1-dev-agent-uploads-586794455900]
+data.aws_iam_policy_document.agent_uploads_tls: Reading...
+data.aws_iam_policy_document.agent_uploads_tls: Read complete after 0s [id=4136008768]
+aws_s3_bucket_lifecycle_configuration.agent_uploads: Refreshing state... [id=project1-dev-agent-uploads-586794455900]
+data.aws_iam_policy_document.agent_upload_url: Reading...
+data.aws_iam_policy_document.agent_upload_url: Read complete after 0s [id=769527508]
+aws_s3_bucket_public_access_block.agent_uploads: Refreshing state... [id=project1-dev-agent-uploads-586794455900]
+aws_s3_bucket_cors_configuration.agent_uploads: Refreshing state... [id=project1-dev-agent-uploads-586794455900]
+data.aws_iam_policy_document.agent_invoke: Reading...
+data.aws_iam_policy_document.agent_invoke: Read complete after 0s [id=3953551961]
+module.hello.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-hello:logs]
+module.auth_start.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-auth-start:logs]
+data.aws_iam_policy_document.auth_verify: Reading...
+module.hello.aws_lambda_function.this: Refreshing state... [id=project1-dev-hello]
+data.aws_iam_policy_document.auth_session: Reading...
+data.aws_iam_policy_document.auth_start: Reading...
+data.aws_iam_policy_document.auth_verify: Read complete after 0s [id=3713138841]
+data.aws_iam_policy_document.auth_session: Read complete after 0s [id=1908985752]
+data.aws_iam_policy_document.auth_logout: Reading...
+data.aws_iam_policy_document.auth_start: Read complete after 0s [id=3676110556]
+data.aws_iam_policy_document.auth_logout: Read complete after 0s [id=4049189361]
+module.auth_session.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-auth-session:logs]
+module.auth_start.aws_lambda_function.this: Refreshing state... [id=project1-dev-auth-start]
+module.auth_session.aws_lambda_function.this: Refreshing state... [id=project1-dev-auth-session]
+module.agent_frontend.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-agent-frontend:logs]
+module.agent_frontend.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-agent-frontend:custom]
+module.agent_frontend.aws_lambda_function.this: Refreshing state... [id=project1-dev-agent-frontend]
+module.agent_invoke.aws_lambda_function.this: Refreshing state... [id=project1-dev-agent-invoke]
+module.agent_invoke.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-agent-invoke:logs]
+module.agent_upload_url.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-agent-upload-url:logs]
+module.agent_upload_url.aws_lambda_function.this: Refreshing state... [id=project1-dev-agent-upload-url]
+data.aws_iam_policy_document.agent_mcp: Reading...
+aws_s3_bucket_policy.agent_uploads: Refreshing state... [id=project1-dev-agent-uploads-586794455900]
+module.agent_mcp.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-agent-mcp:logs]
+module.auth_logout.aws_lambda_function.this: Refreshing state... [id=project1-dev-auth-logout]
+data.aws_iam_policy_document.agent_mcp: Read complete after 0s [id=3166445005]
+module.agent_mcp.aws_lambda_function.this: Refreshing state... [id=project1-dev-agent-mcp]
+module.auth_logout.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-auth-logout:logs]
+aws_iam_role_policy.agent_runtime_ecr: Refreshing state... [id=project1-dev-agentcore-runtime:ecr-image-pull]
+module.agent_upload_url.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-agent-upload-url:custom]
+module.auth_verify.aws_iam_role_policy.logs: Refreshing state... [id=project1-dev-auth-verify:logs]
+module.auth_verify.aws_lambda_function.this: Refreshing state... [id=project1-dev-auth-verify]
+module.agent_invoke.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-agent-invoke:custom]
+module.auth_start.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.auth_session.aws_apigatewayv2_integration.this: Refreshing state... [id=b6iy0id]
+module.auth_session.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.auth_start.aws_apigatewayv2_integration.this: Refreshing state... [id=7ewf1r3]
+module.hello.aws_apigatewayv2_integration.this: Refreshing state... [id=6lyipji]
+module.hello.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.agent_frontend.aws_apigatewayv2_integration.this: Refreshing state... [id=60i2r3g]
+module.auth_session.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-auth-session:custom]
+module.agent_frontend.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.auth_verify.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-auth-verify:custom]
+module.auth_logout.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-auth-logout:custom]
+module.agent_invoke.aws_apigatewayv2_integration.this: Refreshing state... [id=b6t2ec5]
+module.auth_start.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-auth-start:custom]
+module.agent_upload_url.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.agent_invoke.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.agent_upload_url.aws_apigatewayv2_integration.this: Refreshing state... [id=zmkbgrp]
+module.agent_mcp.aws_iam_role_policy.custom[0]: Refreshing state... [id=project1-dev-agent-mcp:custom]
+data.aws_iam_policy_document.agent_gateway_tools: Reading...
+module.auth_logout.aws_apigatewayv2_integration.this: Refreshing state... [id=rqrt1n8]
+data.aws_iam_policy_document.agent_gateway_tools: Read complete after 0s [id=4285531667]
+module.auth_logout.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.auth_start.aws_apigatewayv2_route.this: Refreshing state... [id=myp3vd5]
+module.agent_mcp.aws_apigatewayv2_integration.this: Refreshing state... [id=yiy7mhs]
+module.agent_mcp.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.auth_session.aws_apigatewayv2_route.this: Refreshing state... [id=q2lb2a7]
+module.hello.aws_apigatewayv2_route.this: Refreshing state... [id=kzxp22n]
+module.agent_frontend.aws_apigatewayv2_route.this: Refreshing state... [id=0vmri42]
+module.auth_verify.aws_apigatewayv2_integration.this: Refreshing state... [id=m6dvi12]
+aws_iam_role_policy.agent_gateway_tools: Refreshing state... [id=project1-dev-agentcore-gateway:invoke-tool-lambdas]
+module.auth_verify.aws_lambda_permission.apigw: Refreshing state... [id=AllowAPIGatewayInvoke]
+module.agent_invoke.aws_apigatewayv2_route.this: Refreshing state... [id=nziwp33]
+module.auth_logout.aws_apigatewayv2_route.this: Refreshing state... [id=jctmkr4]
+module.agent_upload_url.aws_apigatewayv2_route.this: Refreshing state... [id=e0sr5tm]
+module.agent_mcp.aws_apigatewayv2_route.this: Refreshing state... [id=crpljys]
+module.auth_verify.aws_apigatewayv2_route.this: Refreshing state... [id=4dty11u]
+aws_bedrockagentcore_gateway.agent: Refreshing state... [name=project1-dev-agent-gateway]
+aws_apigatewayv2_stage.default: Refreshing state... [id=$default]
+data.aws_iam_policy_document.agent_runtime_tools: Reading...
+aws_bedrockagentcore_gateway_target.hello: Refreshing state... [name=hello]
+data.aws_iam_policy_document.agent_runtime_tools: Read complete after 0s [id=114203414]
+aws_iam_role_policy.agent_runtime_tools: Refreshing state... [id=project1-dev-agentcore-runtime:model-and-tools]
+aws_cloudwatch_dashboard.agent: Refreshing state... [id=project1-dev-agent]
+aws_cloudwatch_metric_alarm.agent_api_5xx: Refreshing state... [id=project1-dev-agent-api-5xx]
+aws_bedrockagentcore_agent_runtime.agent[0]: Refreshing state...
+aws_ssm_parameter.agent_runtime_arn: Refreshing state... [id=/project1/dev/agent/runtime-arn]
+
+No changes. Your infrastructure matches the configuration.
+
+Terraform has compared your real infrastructure against your configuration
+and found no differences, so no changes are needed.

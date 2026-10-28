@@ -141,6 +141,74 @@ def test_invalid_image_is_rejected_before_calling_agent(image):
     agent.ainvoke.assert_not_called()
 
 
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@pytest.mark.parametrize("media_type", ["application/pdf", "text/plain", "text/csv", DOCX])
+def test_document_file_builds_named_file_block(media_type):
+    agent = Mock()
+    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("summary")]})
+    payload = {"prompt": "Summarise", "file": {"mediaType": media_type, "data": "aGVsbG8=", "kind": "document"}}
+
+    asyncio.run(_handle_request(agent, payload, "session-a"))
+
+    message = agent.ainvoke.call_args.args[0]["messages"][0]
+    assert message[1] == [
+        {"type": "text", "text": "Summarise"},
+        {"type": "file", "base64": "aGVsbG8=", "mime_type": media_type, "name": "document"},
+    ]
+
+
+def test_image_file_builds_image_block():
+    agent = Mock()
+    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("a cat")]})
+    payload = {"prompt": "?", "file": {"mediaType": "image/png", "data": "aGVsbG8=", "kind": "image"}}
+
+    asyncio.run(_handle_request(agent, payload, "session-a"))
+
+    block = agent.ainvoke.call_args.args[0]["messages"][0][1][1]
+    assert block == {"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"}
+
+
+@pytest.mark.parametrize(
+    "file",
+    [
+        "x",
+        {},
+        {"mediaType": "image/bmp", "data": "aGk=", "kind": "image"},
+        {"mediaType": "application/pdf", "data": "", "kind": "document"},
+        {"mediaType": "application/pdf", "data": "aGk=", "kind": "image"},
+        {"mediaType": "image/png", "data": "aGk=", "kind": "document"},
+    ],
+)
+def test_invalid_file_is_rejected_before_calling_agent(file):
+    agent = Mock()
+    agent.ainvoke = AsyncMock()
+
+    with pytest.raises(ValueError):
+        asyncio.run(_handle_request(agent, {"prompt": "hi", "file": file}, "s"))
+    agent.ainvoke.assert_not_called()
+
+
+def test_converse_formats_document_block_for_langchain_aws():
+    from langchain_aws.chat_models.bedrock_converse import _messages_to_bedrock
+    from langchain_core.messages import HumanMessage
+
+    message = HumanMessage(
+        [
+            {"type": "text", "text": "Summarise"},
+            {"type": "file", "base64": "aGVsbG8=", "mime_type": "application/pdf", "name": "document"},
+        ]
+    )
+
+    converted, _ = _messages_to_bedrock([message])
+
+    document = converted[0]["content"][1]["document"]
+    assert document["format"] == "pdf"
+    assert document["name"] == "document"
+    assert document["source"]["bytes"] == b"hello"
+
+
 def test_request_config_carries_session_and_actor_for_memory():
     agent = Mock()
     agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("ok")]})

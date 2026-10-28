@@ -69,7 +69,7 @@ async def invoke(payload, context):
     session_id = context.session_id or "default"
     correlation = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:12]
     logger.info(json.dumps({"event": "invoke_started", "session": correlation}))
-    vision = isinstance(payload, dict) and payload.get("image") is not None
+    vision = isinstance(payload, dict) and (payload.get("image") is not None or payload.get("file") is not None)
     try:
         result = await handle_request(get_agent(vision), payload, session_id)
     except Exception as error:

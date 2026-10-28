@@ -34,6 +34,11 @@ data "aws_iam_policy_document" "agent_mcp" {
     ]
     resources = [aws_dynamodb_table.agent_mcp_sessions.arn]
   }
+
+  statement {
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.agent_uploads.arn}/u/*"]
+  }
 }
 
 module "agent_mcp" {
@@ -48,6 +53,7 @@ module "agent_mcp" {
   environment = {
     AGENT_RUNTIME_ARN_PARAM = local.agent_ssm_name
     MCP_SESSION_TABLE       = aws_dynamodb_table.agent_mcp_sessions.name
+    UPLOAD_BUCKET           = aws_s3_bucket.agent_uploads.bucket
     LOG_LEVEL               = "INFO"
   }
   enable_custom_policy = true

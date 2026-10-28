@@ -15,6 +15,10 @@ SESSION = "a" * 36
 AUTH_TOKEN = "B" * 43
 AUTH_COOKIE = f"auth_session={AUTH_TOKEN}"
 PHONE_HASH = "p" * 64
+PNG_BYTES = b"\x89PNG fake image bytes"
+PNG_B64 = base64.b64encode(PNG_BYTES).decode()
+OWNER_PREFIX = "u/" + hashlib.sha256(PHONE_HASH.encode()).hexdigest()[:32] + "/"
+KEY = OWNER_PREFIX + "a" * 32
 
 
 def runtime_session(agent_session):
@@ -36,6 +40,9 @@ def configure_clients(monkeypatch, runtime_response=None, runtime_error=None, se
     if session_item == "default":
         session_item = {"phone_hash": {"S": PHONE_HASH}, "expires_at": {"N": str(int(time.time()) + 100)}}
     ddb.get_item.return_value = {"Item": session_item} if session_item else {}
+    s3 = Mock()
+    s3.head_object.return_value = {"ContentType": "image/png", "ContentLength": len(PNG_BYTES)}
+    s3.get_object.return_value = {"Body": io.BytesIO(PNG_BYTES)}
     ssm = Mock()
     ssm.get_parameter.return_value = {"Parameter": {"Value": RUNTIME_ARN}}
     runtime = Mock()
@@ -45,8 +52,16 @@ def configure_clients(monkeypatch, runtime_response=None, runtime_error=None, se
         runtime.invoke_agent_runtime.return_value = runtime_response or {
             "response": io.BytesIO(b'{"response":"Hello from agent"}'),
         }
-    factory = Mock(side_effect=lambda service, **kwargs: {"ssm": ssm, "bedrock-agentcore": runtime, "dynamodb": ddb}[service])
+    factory = Mock(
+        side_effect=lambda service, **kwargs: {
+            "ssm": ssm,
+            "bedrock-agentcore": runtime,
+            "dynamodb": ddb,
+            "s3": s3,
+        }[service]
+    )
     runtime.ddb = ddb
+    runtime.s3 = s3
     return runtime, patch.object(handler.boto3, "client", factory)
 
 
@@ -222,29 +237,45 @@ def test_runtime_session_is_bound_to_user(monkeypatch):
     assert runtime.ddb.get_item.call_args.kwargs["Key"] == key
 
 
-PNG_B64 = base64.b64encode(b"\x89PNG fake image bytes").decode()
-
-
-def image_body(**overrides):
-    body = {"prompt": "What is it?", "image": {"mediaType": "image/png", "data": PNG_B64}}
+def file_body(**overrides):
+    body = {"prompt": "What is it?", "file": {"key": KEY}}
     body.update(overrides)
     return json.dumps(body)
 
 
-def test_image_is_forwarded_to_runtime(monkeypatch):
+def test_file_is_read_from_s3_and_forwarded_to_runtime(monkeypatch):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
     runtime, client_patch = configure_clients(monkeypatch)
     with client_patch:
-        result = handler.lambda_handler(api_event(image_body()), None)
+        result = handler.lambda_handler(api_event(file_body()), None)
 
     assert result["statusCode"] == 200
+    runtime.s3.head_object.assert_called_once_with(Bucket="test-uploads", Key=KEY)
+    runtime.s3.get_object.assert_called_once_with(Bucket="test-uploads", Key=KEY)
     payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
-    assert payload == {"prompt": "What is it?", "image": {"mediaType": "image/png", "data": PNG_B64}}
+    assert payload == {
+        "prompt": "What is it?",
+        "file": {"mediaType": "image/png", "data": PNG_B64, "kind": "image"},
+    }
+
+
+def test_documents_are_forwarded_as_document_kind(monkeypatch):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
+    runtime, client_patch = configure_clients(monkeypatch)
+    runtime.s3.head_object.return_value = {"ContentType": "application/pdf", "ContentLength": len(PNG_BYTES)}
+    with client_patch:
+        handler.lambda_handler(api_event(file_body()), None)
+
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload["file"]["kind"] == "document"
+    assert payload["file"]["mediaType"] == "application/pdf"
 
 
 @pytest.mark.parametrize("prompt", ["", "  ", None])
-def test_image_without_prompt_uses_default_prompt(monkeypatch, prompt):
+def test_file_without_prompt_uses_default_prompt(monkeypatch, prompt):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
     runtime, client_patch = configure_clients(monkeypatch)
-    body = json.loads(image_body())
+    body = json.loads(file_body())
     if prompt is None:
         del body["prompt"]
     else:
@@ -254,44 +285,114 @@ def test_image_without_prompt_uses_default_prompt(monkeypatch, prompt):
 
     assert result["statusCode"] == 200
     payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
-    assert payload["prompt"] == "Describe this image."
+    assert payload["prompt"] == "Describe this file."
 
 
 @pytest.mark.parametrize(
-    "image",
+    "file",
     [
         "x",
         {},
-        {"mediaType": "image/png"},
-        {"data": PNG_B64},
-        {"mediaType": "image/bmp", "data": PNG_B64},
-        {"mediaType": "image/png", "data": ""},
-        {"mediaType": "image/png", "data": "not base64!!"},
-        {"mediaType": "image/png", "data": base64.b64encode(b"x" * 3_750_001).decode()},
+        {"key": 5},
+        {"key": ""},
+        {"key": "u/" + "0" * 32 + "/" + "a" * 32},
+        {"key": OWNER_PREFIX + "../other"},
+        {"key": "other/" + "a" * 32},
+        {"key": OWNER_PREFIX},
     ],
 )
-def test_invalid_image_returns_400_without_invoking_runtime(monkeypatch, image):
+def test_invalid_or_foreign_key_returns_400_without_touching_s3_or_runtime(monkeypatch, file):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
     runtime, client_patch = configure_clients(monkeypatch)
     with client_patch:
-        result = handler.lambda_handler(api_event(json.dumps({"prompt": "hi", "image": image})), None)
+        result = handler.lambda_handler(api_event(json.dumps({"prompt": "hi", "file": file})), None)
+
+    assert result["statusCode"] == 400
+    runtime.s3.head_object.assert_not_called()
+    runtime.s3.get_object.assert_not_called()
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_missing_object_returns_400(monkeypatch):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
+    runtime, client_patch = configure_clients(monkeypatch)
+    runtime.s3.head_object.side_effect = ClientError({"Error": {"Code": "404", "Message": "Not Found"}}, "HeadObject")
+    with client_patch:
+        result = handler.lambda_handler(api_event(file_body()), None)
 
     assert result["statusCode"] == 400
     runtime.invoke_agent_runtime.assert_not_called()
 
 
-def test_unauthenticated_image_request_returns_401(monkeypatch):
+def test_unsupported_object_type_returns_400(monkeypatch):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
     runtime, client_patch = configure_clients(monkeypatch)
+    runtime.s3.head_object.return_value = {"ContentType": "image/bmp", "ContentLength": 10}
     with client_patch:
-        result = handler.lambda_handler(api_event(image_body(), authed=False), None)
+        result = handler.lambda_handler(api_event(file_body()), None)
 
-    assert result["statusCode"] == 401
+    assert result["statusCode"] == 400
+    runtime.s3.get_object.assert_not_called()
     runtime.invoke_agent_runtime.assert_not_called()
 
 
-def test_image_request_logs_do_not_contain_image_or_prompt(monkeypatch, caplog):
+@pytest.mark.parametrize(
+    "content_type,size",
+    [("image/png", 3_750_001), ("application/pdf", 4_500_001), ("text/plain", 25 * 1024 * 1024)],
+)
+def test_file_over_model_limit_returns_413_without_reading_or_invoking(monkeypatch, content_type, size):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
+    runtime, client_patch = configure_clients(monkeypatch)
+    runtime.s3.head_object.return_value = {"ContentType": content_type, "ContentLength": size}
+    with client_patch:
+        result = handler.lambda_handler(api_event(file_body()), None)
+
+    assert result["statusCode"] == 413
+    assert json.loads(result["body"]) == {"error": "File exceeds the model size limit"}
+    runtime.s3.get_object.assert_not_called()
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_runtime_size_error_is_mapped_to_413(monkeypatch):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
+    error = ClientError(
+        {"Error": {"Code": "ValidationException", "Message": "Input is too long for requested model"}},
+        "InvokeAgentRuntime",
+    )
+    runtime, client_patch = configure_clients(monkeypatch, runtime_error=error)
+    with client_patch:
+        result = handler.lambda_handler(api_event(file_body()), None)
+
+    assert result["statusCode"] == 413
+    assert "too long" not in result["body"]
+
+
+def test_base64_image_field_is_no_longer_accepted(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    body = json.dumps({"prompt": "hi", "image": {"mediaType": "image/png", "data": PNG_B64}})
+    with client_patch:
+        result = handler.lambda_handler(api_event(body), None)
+
+    assert result["statusCode"] == 200
+    assert json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"]) == {"prompt": "hi"}
+
+
+def test_unauthenticated_file_request_returns_401(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
+        result = handler.lambda_handler(api_event(file_body(), authed=False), None)
+
+    assert result["statusCode"] == 401
+    runtime.s3.head_object.assert_not_called()
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_file_request_logs_do_not_contain_file_key_or_prompt(monkeypatch, caplog):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
     runtime, client_patch = configure_clients(monkeypatch)
     with caplog.at_level("INFO"), client_patch:
-        handler.lambda_handler(api_event(image_body(prompt="secret question")), None)
+        handler.lambda_handler(api_event(file_body(prompt="secret question")), None)
 
     assert PNG_B64 not in caplog.text
+    assert KEY not in caplog.text
     assert "secret question" not in caplog.text

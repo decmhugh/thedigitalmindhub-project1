@@ -18,27 +18,56 @@ COOKIE_NAME = "agent_session"
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9-]{33,128}$")
 AUTH_COOKIE_NAME = "auth_session"
 AUTH_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
-DEFAULT_IMAGE_PROMPT = "Describe this image."
+DEFAULT_FILE_PROMPT = "Describe this file."
 IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+DOCUMENT_MEDIA_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "text/csv",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
 MAX_IMAGE_BYTES = 3_750_000
+MAX_DOCUMENT_BYTES = 4_500_000
+KEY_PATTERN = re.compile(r"^u/[0-9a-f]{32}/[0-9a-f]{32}$")
+SIZE_ERROR_TERMS = ("too long", "too large", "exceeds", "size", "limit")
+MODEL_LIMIT_MESSAGE = "File exceeds the model size limit"
 
 
-def _valid_image(image: Any) -> dict[str, str] | None:
-    if not isinstance(image, dict):
-        return None
-    data = image.get("data")
-    media_type = image.get("mediaType")
-    if not isinstance(data, str) or not data or media_type not in IMAGE_MEDIA_TYPES:
-        return None
-    if len(data) > MAX_IMAGE_BYTES * 4 // 3 + 4:
-        return None
+class FileRejected(Exception):
+    def __init__(self, status: int, message: str):
+        self.status = status
+        self.message = message
+
+
+def _owner_prefix(user: str) -> str:
+    return "u/" + hashlib.sha256(user.encode("utf-8")).hexdigest()[:32] + "/"
+
+
+def _load_file(file: Any, user: str) -> dict[str, str]:
+    key = file.get("key") if isinstance(file, dict) else None
+    if not isinstance(key, str) or not KEY_PATTERN.match(key) or not key.startswith(_owner_prefix(user)):
+        raise FileRejected(400, "A valid file is required")
+    bucket = os.environ["UPLOAD_BUCKET"]
+    s3 = boto3.client("s3")
     try:
-        decoded = base64.b64decode(data, validate=True)
-    except ValueError:
-        return None
-    if not decoded or len(decoded) > MAX_IMAGE_BYTES:
-        return None
-    return {"mediaType": media_type, "data": data}
+        head = s3.head_object(Bucket=bucket, Key=key)
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            raise FileRejected(400, "A valid file is required") from error
+        raise
+    media_type = head.get("ContentType")
+    if media_type in IMAGE_MEDIA_TYPES:
+        kind, limit = "image", MAX_IMAGE_BYTES
+    elif media_type in DOCUMENT_MEDIA_TYPES:
+        kind, limit = "document", MAX_DOCUMENT_BYTES
+    else:
+        raise FileRejected(400, "A valid file is required")
+    if head.get("ContentLength", 0) > limit:
+        raise FileRejected(413, MODEL_LIMIT_MESSAGE)
+    data = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+    if not data:
+        raise FileRejected(400, "A valid file is required")
+    return {"mediaType": media_type, "data": base64.b64encode(data).decode("ascii"), "kind": kind}
 
 
 def _response(status_code: int, body: dict[str, Any], cookies: list[str] | None = None) -> dict[str, Any]:
@@ -118,6 +147,9 @@ def _error_status(error: Exception) -> int:
         code = error.response.get("Error", {}).get("Code", "").lower()
         if "guardrail" in code:
             return 422
+        message = error.response.get("Error", {}).get("Message", "").lower()
+        if code == "validationexception" and any(term in message for term in SIZE_ERROR_TERMS):
+            return 413
     return 502
 
 
@@ -148,22 +180,25 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     body = _body(event)
     if body is None:
         return _response(400, {"error": "A non-empty prompt is required"})
-    image = None
-    if body.get("image") is not None:
-        image = _valid_image(body["image"])
-        if image is None:
-            return _response(400, {"error": "A valid image is required"})
+    has_file = body.get("file") is not None
     prompt = body.get("prompt")
-    if image is not None and (prompt is None or (isinstance(prompt, str) and not prompt.strip())):
-        prompt = DEFAULT_IMAGE_PROMPT
+    if has_file and (prompt is None or (isinstance(prompt, str) and not prompt.strip())):
+        prompt = DEFAULT_FILE_PROMPT
     if not isinstance(prompt, str) or not prompt.strip():
         return _response(400, {"error": "A non-empty prompt is required"})
-    agent_payload: dict[str, Any] = {"prompt": prompt}
-    if image is not None:
-        agent_payload["image"] = image
     new_session = body.get("new_session", False)
     if not isinstance(new_session, bool):
         return _response(400, {"error": "new_session must be a boolean"})
+
+    agent_payload: dict[str, Any] = {"prompt": prompt}
+    if has_file:
+        try:
+            agent_payload["file"] = _load_file(body["file"], user)
+        except FileRejected as rejected:
+            return _response(rejected.status, {"error": rejected.message})
+        except (BotoCoreError, ClientError, KeyError, OSError) as error:
+            logger.error(json.dumps({"status": 502, "error_type": type(error).__name__}))
+            return _response(502, {"error": "Agent request failed"})
 
     session_id = None if new_session else _cookie_session(event)
     cookies = None
@@ -185,7 +220,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except (BotoCoreError, ClientError, KeyError, ValueError, OSError) as error:
         status_code = _error_status(error)
         _log(session_id, status_code, started, error)
-        message = {422: "Request blocked by safety policy", 504: "Agent request timed out"}.get(status_code, "Agent request failed")
+        message = {422: "Request blocked by safety policy", 504: "Agent request timed out", 413: MODEL_LIMIT_MESSAGE}.get(
+            status_code, "Agent request failed"
+        )
         return _response(status_code, {"error": message})
 
     if blocked:

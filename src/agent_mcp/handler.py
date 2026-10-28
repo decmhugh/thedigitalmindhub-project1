@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import time
 import uuid
@@ -19,8 +20,25 @@ DEFAULT_PROTOCOL_VERSION = "2025-11-25"
 SESSION_TTL_SECONDS = 24 * 60 * 60
 TOOL_NAME = "ask_agent"
 IMAGE_TOOL_NAME = "read_image"
+UPLOAD_URL_TOOL_NAME = "get_upload_url"
+FILE_TOOL_NAME = "read_file"
 DEFAULT_IMAGE_PROMPT = "Describe this image."
+DEFAULT_FILE_PROMPT = "Describe this file."
 IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+DOCUMENT_MEDIA_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "text/csv",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+UPLOAD_MEDIA_TYPES = IMAGE_MEDIA_TYPES | DOCUMENT_MEDIA_TYPES
+MAX_IMAGE_BYTES = 3_750_000
+MAX_DOCUMENT_BYTES = 4_500_000
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+UPLOAD_URL_EXPIRY_SECONDS = 300
+KEY_PATTERN = re.compile(r"^u/[0-9a-f]{32}/[0-9a-f]{32}$")
+SIZE_ERROR_TERMS = ("too long", "too large", "exceeds", "size", "limit")
+MODEL_LIMIT_MESSAGE = "File exceeds the model size limit"
 MAX_IMAGE_BYTES = 3_750_000
 MAX_BODY_BYTES = 5_100_000
 
@@ -198,6 +216,48 @@ def _tools_list(request_id: Any, session_id: str) -> dict[str, Any]:
                             "required": ["response"],
                         },
                     },
+                    {
+                        "name": UPLOAD_URL_TOOL_NAME,
+                        "description": (
+                            "Get a short-lived presigned S3 POST (url, fields, key) to upload an image or document "
+                            "up to 25 MB, then pass the key to read_file."
+                        ),
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "mediaType": {"type": "string", "enum": sorted(UPLOAD_MEDIA_TYPES)},
+                                "size": {"type": "integer", "minimum": 1, "maximum": MAX_UPLOAD_BYTES},
+                            },
+                            "required": ["mediaType", "size"],
+                        },
+                        "outputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "url": {"type": "string"},
+                                "fields": {"type": "object"},
+                                "key": {"type": "string"},
+                                "expiresIn": {"type": "integer"},
+                            },
+                            "required": ["url", "fields", "key", "expiresIn"],
+                        },
+                    },
+                    {
+                        "name": FILE_TOOL_NAME,
+                        "description": "Ask the project AI agent a question about a file uploaded with get_upload_url.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {"key": {"type": "string", "minLength": 1}, "prompt": {"type": "string"}},
+                            "required": ["key"],
+                        },
+                        "outputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "response": {"type": "string"},
+                                "blocked": {"type": "boolean"},
+                            },
+                            "required": ["response"],
+                        },
+                    },
                 ]
             },
         },
@@ -253,7 +313,11 @@ def _log_failure(event: dict[str, Any], error: Exception) -> None:
 
 
 def _call_agent(
-    prompt: str, session: dict[str, Any], session_id: str, image: dict[str, str] | None = None
+    prompt: str,
+    session: dict[str, Any],
+    session_id: str,
+    image: dict[str, str] | None = None,
+    file: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     try:
@@ -264,6 +328,8 @@ def _call_agent(
         agent_payload: dict[str, Any] = {"prompt": prompt}
         if image is not None:
             agent_payload["image"] = image
+        if file is not None:
+            agent_payload["file"] = file
         result = boto3.client("bedrock-agentcore").invoke_agent_runtime(
             agentRuntimeArn=runtime_arn,
             runtimeSessionId=session["runtime_session_id"],
@@ -292,6 +358,9 @@ def _call_agent(
         OSError,
     ) as error:
         if isinstance(error, ClientError):
+            if _is_size_error(error):
+                _log(session_id, 413, started, error)
+                return _model_limit_result()
             code = error.response.get("Error", {}).get("Code", "").lower()
             if "guardrail" in code:
                 text = "Request blocked by safety policy"
@@ -311,6 +380,91 @@ def _call_agent(
         }
 
 
+def _model_limit_result() -> dict[str, Any]:
+    text = MODEL_LIMIT_MESSAGE
+    return {
+        "content": [{"type": "text", "text": text}],
+        "structuredContent": {"response": text, "blocked": False},
+        "isError": True,
+    }
+
+
+def _is_size_error(error: Exception) -> bool:
+    if not isinstance(error, ClientError):
+        return False
+    details = error.response.get("Error", {})
+    message = details.get("Message", "").lower()
+    return details.get("Code", "").lower() == "validationexception" and any(
+        term in message for term in SIZE_ERROR_TERMS
+    )
+
+
+def _owner_prefix(session_id: str) -> str:
+    return "u/" + hashlib.sha256(f"mcp:{session_id}".encode("utf-8")).hexdigest()[:32] + "/"
+
+
+class FileRejected(Exception):
+    def __init__(self, too_large: bool = False):
+        self.too_large = too_large
+
+
+def _load_file(arguments: dict[str, Any], session_id: str) -> dict[str, str]:
+    key = arguments.get("key")
+    if not isinstance(key, str) or not KEY_PATTERN.match(key) or not key.startswith(_owner_prefix(session_id)):
+        raise FileRejected()
+    bucket = os.environ["UPLOAD_BUCKET"]
+    s3 = boto3.client("s3")
+    try:
+        head = s3.head_object(Bucket=bucket, Key=key)
+    except ClientError as error:
+        if error.response.get("Error", {}).get("Code") in ("404", "NoSuchKey", "NotFound"):
+            raise FileRejected() from error
+        raise
+    media_type = head.get("ContentType")
+    if media_type in IMAGE_MEDIA_TYPES:
+        kind, limit = "image", MAX_IMAGE_BYTES
+    elif media_type in DOCUMENT_MEDIA_TYPES:
+        kind, limit = "document", MAX_DOCUMENT_BYTES
+    else:
+        raise FileRejected()
+    if head.get("ContentLength", 0) > limit:
+        raise FileRejected(too_large=True)
+    data = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+    if not data:
+        raise FileRejected()
+    return {"mediaType": media_type, "data": base64.b64encode(data).decode("ascii"), "kind": kind}
+
+
+def _upload_url(arguments: dict[str, Any], session_id: str) -> dict[str, Any] | None:
+    media_type = arguments.get("mediaType")
+    size = arguments.get("size")
+    if (
+        media_type not in UPLOAD_MEDIA_TYPES
+        or not isinstance(size, int)
+        or isinstance(size, bool)
+        or not 1 <= size <= MAX_UPLOAD_BYTES
+    ):
+        return None
+    key = _owner_prefix(session_id) + uuid.uuid4().hex
+    post = boto3.client("s3").generate_presigned_post(
+        Bucket=os.environ["UPLOAD_BUCKET"],
+        Key=key,
+        Fields={"Content-Type": media_type, "x-amz-server-side-encryption": "AES256"},
+        Conditions=[
+            {"Content-Type": media_type},
+            {"x-amz-server-side-encryption": "AES256"},
+            ["content-length-range", 1, size],
+        ],
+        ExpiresIn=UPLOAD_URL_EXPIRY_SECONDS,
+    )
+    structured = {"url": post["url"], "fields": post["fields"], "key": key, "expiresIn": UPLOAD_URL_EXPIRY_SECONDS}
+    return {"content": [{"type": "text", "text": json.dumps(structured)}], "structuredContent": structured}
+
+
+def _tool_error(text: str) -> dict[str, Any]:
+    return {"content": [{"type": "text", "text": text}], "isError": True}
+
+
 def _tool_call(
     request_id: Any,
     request: dict[str, Any],
@@ -319,25 +473,51 @@ def _tool_call(
 ) -> dict[str, Any]:
     params = request.get("params")
     tool_name = params.get("name") if isinstance(params, dict) else None
-    if tool_name not in (TOOL_NAME, IMAGE_TOOL_NAME):
+    if tool_name not in (TOOL_NAME, IMAGE_TOOL_NAME, UPLOAD_URL_TOOL_NAME, FILE_TOOL_NAME):
         return _rpc_error(request_id, -32602, "Unknown tool or invalid arguments", session_id=session_id)
     arguments = params.get("arguments")
     if not isinstance(arguments, dict):
         arguments = {}
+
+    def ok(result: dict[str, Any]) -> dict[str, Any]:
+        return _json_response(200, {"jsonrpc": "2.0", "id": request_id, "result": result}, session_id)
+
+    if tool_name == UPLOAD_URL_TOOL_NAME:
+        try:
+            result = _upload_url(arguments, session_id)
+        except (BotoCoreError, ClientError, KeyError, OSError) as error:
+            _log(session_id, 502, time.monotonic(), error)
+            return ok(_tool_error("Upload request failed"))
+        if result is None:
+            return _rpc_error(
+                request_id, -32602, "A supported mediaType and a size up to 25 MB are required", session_id=session_id
+            )
+        return ok(result)
+
     prompt = arguments.get("prompt")
     image = None
+    file = None
     if tool_name == IMAGE_TOOL_NAME:
         image = _validated_image(arguments)
         if image is None or not (prompt is None or isinstance(prompt, str)):
             return _rpc_error(request_id, -32602, "A valid image and media type are required", session_id=session_id)
         prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else DEFAULT_IMAGE_PROMPT
+    elif tool_name == FILE_TOOL_NAME:
+        if not (prompt is None or isinstance(prompt, str)):
+            return _rpc_error(request_id, -32602, "prompt must be a string", session_id=session_id)
+        prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else DEFAULT_FILE_PROMPT
+        try:
+            file = _load_file(arguments, session_id)
+        except FileRejected as rejected:
+            if rejected.too_large:
+                return ok(_model_limit_result())
+            return _rpc_error(request_id, -32602, "A valid file key is required", session_id=session_id)
+        except (BotoCoreError, ClientError, KeyError, OSError) as error:
+            _log(session_id, 502, time.monotonic(), error)
+            return ok(_tool_error("Agent request failed"))
     if not isinstance(prompt, str) or not prompt.strip():
         return _rpc_error(request_id, -32602, "A non-empty prompt is required", session_id=session_id)
-    return _json_response(
-        200,
-        {"jsonrpc": "2.0", "id": request_id, "result": _call_agent(prompt, session, session_id, image)},
-        session_id,
-    )
+    return ok(_call_agent(prompt, session, session_id, image, file))
 
 
 def _validated_image(arguments: dict[str, Any]) -> dict[str, str] | None:

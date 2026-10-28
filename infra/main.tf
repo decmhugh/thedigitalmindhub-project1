@@ -19,6 +19,12 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 
   route_settings {
+    route_key              = "POST /agent/upload-url"
+    throttling_rate_limit  = 2
+    throttling_burst_limit = 5
+  }
+
+  route_settings {
     route_key              = "ANY /agent/mcp"
     throttling_rate_limit  = 2
     throttling_burst_limit = 5
@@ -36,7 +42,7 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 5
   }
 
-  depends_on = [module.agent_invoke, module.agent_mcp, module.auth_start, module.auth_verify]
+  depends_on = [module.agent_invoke, module.agent_mcp, module.agent_upload_url, module.auth_start, module.auth_verify]
 }
 
 module "hello" {

@@ -50,16 +50,38 @@ def test_page_handles_rate_limit(html):
     assert "429" in html
 
 
-def test_page_has_image_attachment_controls(html):
+def test_page_has_file_attachment_controls(html):
     assert 'type="file"' in html
-    assert 'accept="image/png,image/jpeg,image/gif,image/webp"' in html
+    for media_type in (
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "text/plain",
+        "text/csv",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ):
+        assert media_type in html
     assert 'id="attach-button"' in html
     assert 'id="image-preview"' in html
     assert 'id="remove-image-button"' in html
+    assert 'id="upload-progress"' in html
 
 
-def test_page_enforces_image_limits_and_sends_image(html):
-    assert "3750000" in html
-    assert "mediaType" in html
-    assert "payload.image" in html
-    assert "FileReader" in html
+def test_page_uploads_directly_to_s3_then_sends_key(html):
+    assert '"/agent/upload-url"' in html
+    assert "26214400" in html
+    assert "FormData" in html
+    assert "payload.file" in html
+    assert "payload.image" not in html
+
+
+def test_page_does_not_send_file_bytes_to_invoke(html):
+    assert "JSON.stringify(payload)" in html
+    assert "base64" not in html.lower()
+
+
+def test_page_shows_model_limit_message_on_413(html):
+    assert "413" in html
+    assert "too large for the model" in html

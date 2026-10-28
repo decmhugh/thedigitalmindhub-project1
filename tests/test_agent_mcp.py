@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 from unittest.mock import Mock, patch
@@ -72,6 +73,11 @@ def initialize(table, request_id=1):
 def configure_clients(monkeypatch, runtime_response=None, runtime_error=None):
     monkeypatch.setenv("AGENT_RUNTIME_ARN_PARAM", "/test/agent/runtime-arn")
     monkeypatch.setenv("MCP_SESSION_TABLE", "test-agent-mcp-sessions")
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
+    s3 = Mock()
+    s3.generate_presigned_post.return_value = {"url": "https://s3.example/test-uploads", "fields": {"k": "v"}}
+    s3.head_object.return_value = {"ContentType": "image/png", "ContentLength": 21}
+    s3.get_object.side_effect = lambda **kwargs: {"Body": io.BytesIO(b"\x89PNG fake image bytes")}
     table = SessionTable()
     dynamodb = Mock()
     dynamodb.Table.return_value = table
@@ -84,8 +90,11 @@ def configure_clients(monkeypatch, runtime_response=None, runtime_error=None):
         runtime.invoke_agent_runtime.return_value = runtime_response or {
             "response": io.BytesIO(b'{"response":"Hello from agent"}'),
         }
-    client_factory = Mock(side_effect=lambda service, **kwargs: {"ssm": ssm, "bedrock-agentcore": runtime}[service])
+    client_factory = Mock(
+        side_effect=lambda service, **kwargs: {"ssm": ssm, "bedrock-agentcore": runtime, "s3": s3}[service]
+    )
     resource_factory = Mock(return_value=dynamodb)
+    runtime.s3 = s3
     return table, runtime, patch.object(handler.boto3, "client", client_factory), patch.object(
         handler.boto3, "resource", resource_factory
     )
@@ -111,7 +120,175 @@ def test_initialization_and_tool_discovery(monkeypatch):
     assert initialized["statusCode"] == 200
     assert rpc_response(initialized)["result"]["protocolVersion"] == PROTOCOL_VERSION
     assert initialized["headers"]["MCP-Session-Id"] == session_id
-    assert [tool["name"] for tool in rpc_response(listed)["result"]["tools"]] == ["ask_agent", "read_image"]
+    assert [tool["name"] for tool in rpc_response(listed)["result"]["tools"]] == [
+        "ask_agent",
+        "read_image",
+        "get_upload_url",
+        "read_file",
+    ]
+
+
+def owner_prefix(session_id):
+    return "u/" + hashlib.sha256(f"mcp:{session_id}".encode()).hexdigest()[:32] + "/"
+
+
+def call_tool(session_id, name, arguments, request_id=2):
+    return handler.lambda_handler(
+        event(
+            "POST",
+            {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            },
+            session_id,
+        ),
+        None,
+    )
+
+
+def test_get_upload_url_returns_session_scoped_presigned_post(monkeypatch):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        result = call_tool(session_id, "get_upload_url", {"mediaType": "application/pdf", "size": 2048})
+
+    structured = rpc_response(result)["result"]["structuredContent"]
+    assert structured["url"] == "https://s3.example/test-uploads"
+    assert structured["fields"] == {"k": "v"}
+    assert structured["expiresIn"] == 300
+    assert structured["key"].startswith(owner_prefix(session_id))
+    call = runtime.s3.generate_presigned_post.call_args.kwargs
+    assert call["Bucket"] == "test-uploads" and call["ExpiresIn"] == 300
+    assert {"Content-Type": "application/pdf"} in call["Conditions"]
+    assert ["content-length-range", 1, 2048] in call["Conditions"]
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {},
+        {"mediaType": "image/bmp", "size": 10},
+        {"mediaType": "image/png"},
+        {"mediaType": "image/png", "size": 0},
+        {"mediaType": "image/png", "size": 25 * 1024 * 1024 + 1},
+        {"mediaType": "image/png", "size": "10"},
+    ],
+)
+def test_get_upload_url_rejects_invalid_arguments(monkeypatch, arguments):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        result = call_tool(session_id, "get_upload_url", arguments)
+
+    assert rpc_response(result)["error"]["code"] == -32602
+    runtime.s3.generate_presigned_post.assert_not_called()
+
+
+def test_read_file_reads_s3_object_and_forwards_to_agent(monkeypatch):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        key = owner_prefix(session_id) + "a" * 32
+        result = call_tool(session_id, "read_file", {"key": key, "prompt": "What is it?"})
+
+    assert rpc_response(result)["result"]["content"] == [{"type": "text", "text": "Hello from agent"}]
+    runtime.s3.head_object.assert_called_once_with(Bucket="test-uploads", Key=key)
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload == {
+        "prompt": "What is it?",
+        "file": {"mediaType": "image/png", "data": PNG_B64, "kind": "image"},
+    }
+
+
+def test_read_file_uses_default_prompt(monkeypatch):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        call_tool(session_id, "read_file", {"key": owner_prefix(session_id) + "a" * 32})
+
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload["prompt"] == "Describe this file."
+
+
+def test_read_file_rejects_other_sessions_key(monkeypatch):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        _, first_id = initialize(table, request_id=1)
+        _, second_id = initialize(table, request_id=2)
+        result = call_tool(second_id, "read_file", {"key": owner_prefix(first_id) + "a" * 32})
+
+    assert rpc_response(result)["error"]["code"] == -32602
+    runtime.s3.head_object.assert_not_called()
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+@pytest.mark.parametrize("arguments", [{}, {"key": 5}, {"key": "u/short"}, {"key": ""}])
+def test_read_file_rejects_invalid_keys(monkeypatch, arguments):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        result = call_tool(session_id, "read_file", arguments)
+
+    assert rpc_response(result)["error"]["code"] == -32602
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_read_file_missing_object_is_invalid_params(monkeypatch):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    runtime.s3.head_object.side_effect = ClientError({"Error": {"Code": "404", "Message": "x"}}, "HeadObject")
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        result = call_tool(session_id, "read_file", {"key": owner_prefix(session_id) + "a" * 32})
+
+    assert rpc_response(result)["error"]["code"] == -32602
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+@pytest.mark.parametrize("content_type,size", [("image/png", 3_750_001), ("application/pdf", 4_500_001)])
+def test_read_file_over_model_limit_is_a_tool_error(monkeypatch, content_type, size):
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch)
+    runtime.s3.head_object.return_value = {"ContentType": content_type, "ContentLength": size}
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        result = call_tool(session_id, "read_file", {"key": owner_prefix(session_id) + "a" * 32})
+
+    tool_result = rpc_response(result)["result"]
+    assert tool_result["isError"] is True
+    assert tool_result["content"] == [{"type": "text", "text": "File exceeds the model size limit"}]
+    runtime.s3.get_object.assert_not_called()
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_read_file_runtime_size_error_is_model_limit_error(monkeypatch):
+    error = ClientError(
+        {"Error": {"Code": "ValidationException", "Message": "Input is too long for requested model"}},
+        "InvokeAgentRuntime",
+    )
+    table, runtime, client_patch, resource_patch = configure_clients(monkeypatch, runtime_error=error)
+    with client_patch, resource_patch:
+        _, session_id = initialize(table)
+        result = call_tool(session_id, "read_file", {"key": owner_prefix(session_id) + "a" * 32})
+
+    tool_result = rpc_response(result)["result"]
+    assert tool_result["isError"] is True
+    assert tool_result["content"][0]["text"] == "File exceeds the model size limit"
+    assert "too long" not in result["body"]
+
+
+def test_file_tool_logs_do_not_include_key_or_content(monkeypatch, caplog):
+    table, _, client_patch, resource_patch = configure_clients(monkeypatch)
+    with caplog.at_level("INFO"), client_patch, resource_patch:
+        _, session_id = initialize(table)
+        key = owner_prefix(session_id) + "a" * 32
+        call_tool(session_id, "read_file", {"key": key, "prompt": "secret question"})
+
+    assert key not in caplog.text
+    assert PNG_B64 not in caplog.text
+    assert "secret question" not in caplog.text
+    assert session_id not in caplog.text
 
 
 PNG_B64 = base64.b64encode(b"\x89PNG fake image bytes").decode()

@@ -28,6 +28,11 @@ data "aws_iam_policy_document" "agent_invoke" {
     actions   = ["dynamodb:GetItem"]
     resources = [aws_dynamodb_table.auth.arn]
   }
+
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.agent_uploads.arn}/u/*"]
+  }
 }
 
 module "agent_invoke" {
@@ -42,6 +47,7 @@ module "agent_invoke" {
   environment = {
     AGENT_RUNTIME_ARN_PARAM = local.agent_ssm_name
     AUTH_TABLE              = aws_dynamodb_table.auth.name
+    UPLOAD_BUCKET           = aws_s3_bucket.agent_uploads.bucket
     LOG_LEVEL               = "INFO"
   }
   enable_custom_policy = true

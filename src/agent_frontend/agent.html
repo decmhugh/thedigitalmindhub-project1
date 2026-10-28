@@ -155,12 +155,14 @@
         </div>
         <form id="prompt-form" class="composer">
           <div id="image-preview" class="image-preview" hidden>
-            <img id="image-thumb" alt="Attached image preview">
+            <img id="image-thumb" alt="Attached image preview" hidden>
+            <span id="file-name" class="file-name"></span>
+            <progress id="upload-progress" max="100" value="0" hidden></progress>
             <button id="remove-image-button" class="secondary" type="button">Remove</button>
           </div>
           <p id="image-error" class="composer-error" role="alert"></p>
-          <input id="image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
-          <button id="attach-button" class="secondary attach" type="button" aria-label="Attach image">📎</button>
+          <input id="image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.txt,.csv,.docx" hidden>
+          <button id="attach-button" class="secondary attach" type="button" aria-label="Attach image or document">📎</button>
           <label class="sr-only" for="prompt">Message</label>
           <textarea id="prompt" placeholder="Write a message…" rows="1"></textarea>
           <button id="send-button" class="primary" type="submit">Send</button>
@@ -245,47 +247,118 @@
         $("#messages").append(message).scrollTop($("#messages")[0].scrollHeight);
       }
 
-      const imageTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-      const maxImageBytes = 3750000;
-      let attachedImage = null;
+      const fileTypes = {
+        "image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true,
+        "application/pdf": false, "text/plain": false, "text/csv": false,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": false
+      };
+      const extensionTypes = {
+        png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+        pdf: "application/pdf", txt: "text/plain", csv: "text/csv",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      };
+      const maxFileBytes = 26214400;
+      let attachedFile = null;
+      let uploadXhr = null;
+      let isUploading = false;
 
-      function clearImage() {
-        attachedImage = null;
+      function mediaTypeOf(file) {
+        if (file.type && Object.prototype.hasOwnProperty.call(fileTypes, file.type)) return file.type;
+        const extension = file.name.split(".").pop().toLowerCase();
+        return Object.prototype.hasOwnProperty.call(extensionTypes, extension) ? extensionTypes[extension] : null;
+      }
+
+      function clearFile() {
+        if (uploadXhr) { uploadXhr.abort(); uploadXhr = null; }
+        if (attachedFile && attachedFile.previewUrl) URL.revokeObjectURL(attachedFile.previewUrl);
+        attachedFile = null;
+        isUploading = false;
         $("#image-input").val("");
-        $("#image-thumb").removeAttr("src");
+        $("#image-thumb").removeAttr("src").prop("hidden", true);
+        $("#file-name").text("");
+        $("#upload-progress").prop("hidden", true).val(0);
         $("#image-preview").prop("hidden", true);
+        $("#send-button").prop("disabled", isSending);
+      }
+
+      function uploadFile(file, mediaType) {
+        const isImage = fileTypes[mediaType];
+        attachedFile = { key: null, mediaType: mediaType, previewUrl: isImage ? URL.createObjectURL(file) : null };
+        $("#image-thumb").prop("hidden", !isImage);
+        if (isImage) $("#image-thumb").attr("src", attachedFile.previewUrl);
+        $("#file-name").text(isImage ? "" : file.name);
+        $("#upload-progress").val(0).prop("hidden", false);
+        $("#image-preview").prop("hidden", false);
+        isUploading = true;
+        $("#send-button").prop("disabled", true);
+        const current = attachedFile;
+        $.ajax({
+          url: "/agent/upload-url",
+          method: "POST",
+          contentType: "application/json",
+          data: JSON.stringify({ mediaType: mediaType, size: file.size })
+        }).done(function (grant) {
+          if (attachedFile !== current) return;
+          const form = new FormData();
+          Object.keys(grant.fields).forEach(function (name) { form.append(name, grant.fields[name]); });
+          form.append("file", file);
+          const request = new XMLHttpRequest();
+          uploadXhr = request;
+          request.upload.addEventListener("progress", function (progress) {
+            if (progress.lengthComputable) $("#upload-progress").val(Math.round(progress.loaded / progress.total * 100));
+          });
+          request.addEventListener("load", function () {
+            if (attachedFile !== current) return;
+            uploadXhr = null;
+            if (request.status >= 200 && request.status < 300) {
+              current.key = grant.key;
+              isUploading = false;
+              $("#upload-progress").prop("hidden", true);
+              $("#send-button").prop("disabled", isSending);
+            } else {
+              clearFile();
+              $("#image-error").text("The upload failed. Try again.");
+            }
+          });
+          request.addEventListener("error", function () {
+            if (attachedFile !== current) return;
+            clearFile();
+            $("#image-error").text("The upload failed. Try again.");
+          });
+          request.open("POST", grant.url);
+          request.send(form);
+        }).fail(function (xhr) {
+          if (attachedFile !== current) return;
+          clearFile();
+          if (xhr.status === 401) { show("phone"); return; }
+          $("#image-error").text(xhr.status === 429
+            ? "Too many requests. Please wait a moment and try again."
+            : "Could not start the upload. Try again.");
+        });
       }
 
       $("#attach-button").on("click", function () { $("#image-input").trigger("click"); });
-      $("#remove-image-button").on("click", function () { clearImage(); $("#image-error").text(""); });
+      $("#remove-image-button").on("click", function () { clearFile(); $("#image-error").text(""); });
       $("#image-input").on("change", function () {
         const file = this.files && this.files[0];
         $("#image-error").text("");
         if (!file) return;
-        if (imageTypes.indexOf(file.type) === -1) {
-          clearImage();
-          $("#image-error").text("Please choose a PNG, JPEG, GIF or WebP image.");
+        clearFile();
+        const mediaType = mediaTypeOf(file);
+        if (!mediaType) {
+          $("#image-error").text("Please choose a PNG, JPEG, GIF, WebP, PDF, TXT, CSV or DOCX file.");
           return;
         }
-        if (file.size > maxImageBytes) {
-          clearImage();
-          $("#image-error").text("That image is too large. The limit is 3.75 MB.");
+        if (file.size === 0 || file.size > maxFileBytes) {
+          $("#image-error").text("That file is empty or larger than the 25 MB limit.");
           return;
         }
-        const reader = new FileReader();
-        reader.onload = function () {
-          const url = String(reader.result);
-          attachedImage = { mediaType: file.type, data: url.slice(url.indexOf(",") + 1), url: url };
-          $("#image-thumb").attr("src", url);
-          $("#image-preview").prop("hidden", false);
-        };
-        reader.onerror = function () { clearImage(); $("#image-error").text("Could not read that image."); };
-        reader.readAsDataURL(file);
+        uploadFile(file, mediaType);
       });
 
       $("#new-session-button").on("click", function () {
         startNewSession = true;
-        clearImage();
+        clearFile();
         $("#session-label").text("New session");
         $("#messages").empty().append($("<p>").attr("id", "empty-state").addClass("empty-state").text(emptyState));
         $("#prompt").trigger("focus");
@@ -294,17 +367,18 @@
       $("#prompt-form").on("submit", function (event) {
         event.preventDefault();
         const prompt = $("#prompt").val().trim();
-        if ((!prompt && !attachedImage) || isSending) return;
-        const image = attachedImage;
-        addMessage("user", prompt, image && image.url);
+        const file = attachedFile && attachedFile.key ? attachedFile : null;
+        if ((!prompt && !file) || isSending || isUploading) return;
+        addMessage("user", prompt, file && file.previewUrl);
         $("#prompt").val("").trigger("focus");
-        clearImage();
+        if (file) file.previewUrl = null;
+        clearFile();
         $("#image-error").text("");
         isSending = true;
         $("#send-button").prop("disabled", true).text("…");
         const payload = {};
         if (prompt) payload.prompt = prompt;
-        if (image) payload.image = { mediaType: image.mediaType, data: image.data };
+        if (file) payload.file = { key: file.key };
         if (startNewSession) payload.new_session = true;
         $.ajax({
           url: "/agent/invoke",
@@ -322,13 +396,15 @@
           }
           const message = xhr.status === 429
             ? "Too many requests. Please wait a moment and try again."
-            : xhr.status === 400
-              ? "That message or image could not be sent. Check the image and try again."
-              : "The agent could not complete that request. Try again.";
+            : xhr.status === 413
+              ? "That file is too large for the model. Try a smaller file (images up to 3.75 MB, documents up to 4.5 MB)."
+              : xhr.status === 400
+                ? "That message or file could not be sent. Check the file and try again."
+                : "The agent could not complete that request. Try again.";
           addMessage("agent", message);
         }).always(function () {
           isSending = false;
-          $("#send-button").prop("disabled", false).text("Send");
+          $("#send-button").prop("disabled", isUploading).text("Send");
         });
       });
     });
