@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#445"/>
+    </marker>
+    <style>
+      .box{fill:#fff;stroke:#232f3e;stroke-width:1.5}
+      .lam{fill:#fff4e5;stroke:#e07b00;stroke-width:1.5}
+      .dat{fill:#e8f5e9;stroke:#2e7d32;stroke-width:1.5}
+      .ai{fill:#f3e8ff;stroke:#7b1fa2;stroke-width:1.5}
+      .ops{fill:#e8f0fe;stroke:#1a56db;stroke-width:1.5}
+      .grp{fill:none;stroke:#232f3e;stroke-dasharray:6 4;stroke-width:1.2}
+      .t{fill:#232f3e}
+      .s{fill:#556;font-size:11px}
+      .h{font-weight:700;font-size:14px;fill:#232f3e}
+      .l{stroke:#445;stroke-width:1.5;fill:none;marker-end:url(#a)}
+    </style>
+  </defs>
+  <rect width="1200" height="800" fill="#fafbfc"/>
+  <text x="20" y="28" class="h" font-size="20">project1 — Serverless AWS Infrastructure (dev)</text>
+  <text x="20" y="46" class="s">Terraform-managed · one Lambda per endpoint · Python 3.12 · Bedrock AgentCore</text>
+
+  <rect x="20" y="300" width="110" height="60" rx="6" class="box"/>
+  <text x="75" y="326" text-anchor="middle" class="t">Browser</text>
+  <text x="75" y="344" text-anchor="middle" class="s">/app SPA</text>
+
+  <rect x="170" y="240" width="150" height="190" rx="6" class="ops"/>
+  <text x="245" y="266" text-anchor="middle" class="h">API Gateway</text>
+  <text x="245" y="283" text-anchor="middle" class="s">HTTP API</text>
+  <text x="245" y="312" text-anchor="middle" class="s">GET /hello · GET /app</text>
+  <text x="245" y="328" text-anchor="middle" class="s">POST /auth/start|verify|logout</text>
+  <text x="245" y="344" text-anchor="middle" class="s">GET /auth/session</text>
+  <text x="245" y="360" text-anchor="middle" class="s">POST /agent/invoke</text>
+  <text x="245" y="376" text-anchor="middle" class="s">POST /agent/upload-url</text>
+  <text x="245" y="392" text-anchor="middle" class="s">ANY /agent/mcp</text>
+  <path d="M130 330H170" class="l"/>
+  <path d="M320 330H360" class="l"/>
+
+  <rect x="360" y="70" width="250" height="660" rx="10" class="grp"/>
+  <text x="372" y="90" class="h">Lambda (own IAM role + log group)</text>
+  <rect x="380" y="105" width="210" height="44" rx="6" class="lam"/><text x="485" y="132" text-anchor="middle" class="t">hello</text>
+  <rect x="380" y="165" width="210" height="44" rx="6" class="lam"/><text x="485" y="192" text-anchor="middle" class="t">agent_frontend</text>
+  <rect x="380" y="225" width="210" height="44" rx="6" class="lam"/><text x="485" y="252" text-anchor="middle" class="t">auth_start</text>
+  <rect x="380" y="285" width="210" height="44" rx="6" class="lam"/><text x="485" y="312" text-anchor="middle" class="t">auth_verify</text>
+  <rect x="380" y="345" width="210" height="44" rx="6" class="lam"/><text x="485" y="372" text-anchor="middle" class="t">auth_session</text>
+  <rect x="380" y="405" width="210" height="44" rx="6" class="lam"/><text x="485" y="432" text-anchor="middle" class="t">auth_logout</text>
+  <rect x="380" y="500" width="210" height="44" rx="6" class="lam"/><text x="485" y="527" text-anchor="middle" class="t">agent_invoke</text>
+  <rect x="380" y="590" width="210" height="44" rx="6" class="lam"/><text x="485" y="617" text-anchor="middle" class="t">agent_upload_url</text>
+  <rect x="380" y="665" width="210" height="44" rx="6" class="lam"/><text x="485" y="692" text-anchor="middle" class="t">agent_mcp</text>
+
+  <rect x="660" y="95" width="210" height="60" rx="6" class="dat"/>
+  <text x="765" y="120" text-anchor="middle" class="t">DynamoDB: auth</text>
+  <text x="765" y="138" text-anchor="middle" class="s">OTP codes / sessions</text>
+  <rect x="660" y="175" width="210" height="50" rx="6" class="dat"/>
+  <text x="765" y="196" text-anchor="middle" class="t">SSM: auth pepper</text>
+  <text x="765" y="212" text-anchor="middle" class="s">generated secret</text>
+  <path d="M590 307H625V125H660" class="l"/>
+  <path d="M590 247H640V200H660" class="l"/>
+  <path d="M590 367H625V125" class="l"/>
+  <path d="M590 427H625V125" class="l"/>
+
+  <rect x="660" y="495" width="210" height="50" rx="6" class="dat"/>
+  <text x="765" y="516" text-anchor="middle" class="t">SSM: agent runtime ARN</text>
+  <path d="M590 522H660" class="l"/>
+
+  <rect x="660" y="585" width="210" height="54" rx="6" class="dat"/>
+  <text x="765" y="609" text-anchor="middle" class="t">S3: agent_uploads</text>
+  <text x="765" y="626" text-anchor="middle" class="s">presigned PUT · SSE · lifecycle</text>
+  <path d="M590 612H660" class="l"/>
+
+  <rect x="660" y="660" width="210" height="54" rx="6" class="dat"/>
+  <text x="765" y="684" text-anchor="middle" class="t">DynamoDB: mcp_sessions</text>
+  <text x="765" y="701" text-anchor="middle" class="s">MCP session state</text>
+  <path d="M590 687H660" class="l"/>
+
+  <rect x="660" y="740" width="210" height="44" rx="6" class="ops"/>
+  <text x="765" y="760" text-anchor="middle" class="t">CloudWatch</text>
+  <text x="765" y="775" text-anchor="middle" class="s">dashboard · 5xx + invoke alarms</text>
+
+  <rect x="920" y="70" width="260" height="500" rx="10" class="grp"/>
+  <text x="932" y="90" class="h">Bedrock AgentCore</text>
+  <rect x="940" y="105" width="220" height="62" rx="6" class="ai"/>
+  <text x="1050" y="130" text-anchor="middle" class="t">Agent Runtime</text>
+  <text x="1050" y="148" text-anchor="middle" class="s">container from ECR (agent/)</text>
+  <rect x="940" y="200" width="220" height="50" rx="6" class="ai"/>
+  <text x="1050" y="230" text-anchor="middle" class="t">Memory</text>
+  <rect x="940" y="283" width="220" height="62" rx="6" class="ai"/>
+  <text x="1050" y="308" text-anchor="middle" class="t">Gateway</text>
+  <text x="1050" y="326" text-anchor="middle" class="s">target: hello</text>
+  <rect x="940" y="378" width="220" height="50" rx="6" class="ai"/>
+  <text x="1050" y="408" text-anchor="middle" class="t">Guardrail (versioned)</text>
+  <rect x="940" y="460" width="220" height="50" rx="6" class="ai"/>
+  <text x="1050" y="490" text-anchor="middle" class="t">Bedrock foundation model</text>
+  <path d="M870 520H895V136H940" class="l"/>
+  <path d="M1050 167V200" class="l"/>
+  <path d="M1020 167V180H920V314H940" class="l"/>
+  <path d="M1160 136H1175V403H1160" class="l"/>
+  <path d="M1175 403V485H1160" class="l"/>
+
+  <rect x="920" y="600" width="260" height="170" rx="10" class="grp"/>
+  <text x="932" y="620" class="h">Image build pipeline</text>
+  <rect x="935" y="635" width="110" height="44" rx="6" class="ops"/><text x="990" y="662" text-anchor="middle" class="t">S3 source</text>
+  <rect x="1060" y="635" width="105" height="44" rx="6" class="ops"/><text x="1112" y="662" text-anchor="middle" class="t">CodeBuild</text>
+  <rect x="935" y="705" width="110" height="44" rx="6" class="ai"/><text x="990" y="732" text-anchor="middle" class="t">ECR repo</text>
+  <rect x="1060" y="705" width="105" height="44" rx="6" class="ops"/><text x="1112" y="732" text-anchor="middle" class="t">Logs</text>
+  <path d="M1045 657H1060" class="l"/>
+  <path d="M1075 679L1030 705" class="l"/>
+  <path d="M1112 679V705" class="l"/>
+
+  <rect x="20" y="640" width="14" height="14" class="lam"/><text x="40" y="652" class="s">Lambda</text>
+  <rect x="20" y="660" width="14" height="14" class="dat"/><text x="40" y="672" class="s">Data / config</text>
+  <rect x="20" y="680" width="14" height="14" class="ai"/><text x="40" y="692" class="s">AI / AgentCore</text>
+  <rect x="20" y="700" width="14" height="14" class="ops"/><text x="40" y="712" class="s">Gateway / build / ops</text>
+</svg>

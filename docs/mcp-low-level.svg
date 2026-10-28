@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 1320" font-family="Segoe UI, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#334"/></marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker>
+    <style>
+      .lam{fill:#fff4e5;stroke:#e07b00;stroke-width:1.5}
+      .dat{fill:#e8f5e9;stroke:#2e7d32;stroke-width:1.5}
+      .ai{fill:#f3e8ff;stroke:#7b1fa2;stroke-width:1.5}
+      .ops{fill:#e8f0fe;stroke:#1a56db;stroke-width:1.5}
+      .cli{fill:#fff;stroke:#232f3e;stroke-width:1.5}
+      .grp{fill:none;stroke:#232f3e;stroke-dasharray:6 4;stroke-width:1.2}
+      .t{fill:#232f3e}
+      .s{fill:#556;font-size:11px}
+      .h{font-weight:700;font-size:14px;fill:#232f3e}
+      .l{stroke:#334;stroke-width:1.5;fill:none;marker-end:url(#a)}
+      .m{stroke:#334;stroke-width:1.3;fill:none;marker-end:url(#a)}
+      .rt{stroke:#2e7d32;stroke-width:1.3;fill:none;stroke-dasharray:5 3;marker-end:url(#r)}
+      .life{stroke:#aab;stroke-dasharray:3 4;stroke-width:1}
+      .c{text-anchor:middle}
+    </style>
+  </defs>
+  <rect width="1420" height="1320" fill="#fafbfc"/>
+  <text x="20" y="28" font-size="20" font-weight="700" fill="#232f3e">MCP server — low-level design</text>
+  <text x="20" y="46" class="s">Panel A: components and routing across the two models · Panel B: request/prompt sequence (JSON-RPC over HTTP, Streamable HTTP style)</text>
+
+  <!-- ============ PANEL A ============ -->
+  <text x="20" y="76" class="h">A. Components and routing</text>
+
+  <rect x="20" y="110" width="130" height="80" rx="6" class="cli"/>
+  <text x="85" y="138" class="c t">MCP client</text>
+  <text x="85" y="154" class="c s">Claude / IDE / custom</text>
+  <text x="85" y="170" class="c s">JSON-RPC 2.0</text>
+
+  <rect x="185" y="110" width="120" height="80" rx="6" class="ops"/>
+  <text x="245" y="138" class="c t">API Gateway</text>
+  <text x="245" y="156" class="c s">ANY /agent/mcp</text>
+  <path d="M150 150H185" class="l"/>
+  <path d="M305 150H345" class="l"/>
+
+  <!-- Lambda -->
+  <rect x="345" y="90" width="330" height="330" rx="10" class="grp"/>
+  <text x="357" y="110" class="h">Lambda: agent_mcp (60s, 256MB)</text>
+  <rect x="360" y="122" width="300" height="86" rx="6" class="lam"/>
+  <text x="372" y="140" class="t" font-weight="700">Protocol (JSON-RPC)</text>
+  <text x="372" y="157" class="s">POST: initialize · notifications/initialized (202)</text>
+  <text x="372" y="172" class="s">      tools/list · tools/call</text>
+  <text x="372" y="187" class="s">GET → not supported · DELETE → end session</text>
+  <text x="372" y="201" class="s">Versions 2024-11-05 … 2025-11-25 · MCP-Session-Id</text>
+  <rect x="360" y="218" width="300" height="190" rx="6" class="lam"/>
+  <text x="372" y="236" class="t" font-weight="700">tools/call dispatch</text>
+  <text x="372" y="256" class="t">ask_agent</text><text x="470" y="256" class="s">prompt → text agent</text>
+  <text x="372" y="280" class="t">read_image</text><text x="470" y="280" class="s">inline base64 image ≤3.75MB + prompt</text>
+  <text x="372" y="304" class="t">get_upload_url</text><text x="470" y="304" class="s">presigned POST (no agent call)</text>
+  <text x="372" y="328" class="t">read_file</text><text x="470" y="328" class="s">S3 key + prompt (image/doc ≤4.5MB)</text>
+  <text x="372" y="356" class="s">Validates args · owner-prefix key check</text>
+  <text x="372" y="372" class="s">u/&lt;sha256(mcp:session)[:32]&gt;/&lt;uuid&gt;</text>
+  <text x="372" y="392" class="s">Maps guardrail → 422, size → 413, timeout → 504</text>
+
+  <!-- data -->
+  <rect x="345" y="450" width="150" height="56" rx="6" class="dat"/>
+  <text x="420" y="474" class="c t">DynamoDB</text><text x="420" y="491" class="c s">mcp_sessions · TTL 24h</text>
+  <rect x="510" y="450" width="165" height="56" rx="6" class="dat"/>
+  <text x="592" y="474" class="c t">S3 agent_uploads</text><text x="592" y="491" class="c s">u/* put · get/head</text>
+  <rect x="345" y="525" width="330" height="40" rx="6" class="dat"/>
+  <text x="510" y="550" class="c t">SSM: agent runtime ARN</text>
+  <path d="M420 420V450" class="l"/>
+  <path d="M592 420V450" class="l"/>
+  <path d="M510 420V525" class="l" style="display:none"/>
+
+  <!-- Runtime -->
+  <rect x="730" y="90" width="670" height="560" rx="10" class="grp"/>
+  <text x="742" y="110" class="h">Bedrock AgentCore Runtime (container: agent/app.py)</text>
+  <path d="M675 150H730" class="l"/>
+  <text x="702" y="140" class="c s">Invoke</text>
+  <text x="702" y="165" class="c s">AgentRuntime</text>
+
+  <rect x="750" y="125" width="630" height="62" rx="6" class="ai"/>
+  <text x="765" y="146" class="t" font-weight="700">@app.entrypoint invoke(payload, context)</text>
+  <text x="765" y="163" class="s">payload = {prompt, image?, file?} · runtimeSessionId → thread_id (conversation memory key)</text>
+  <text x="765" y="178" class="s">Logs hashed session correlation id only</text>
+
+  <polygon points="1065,205 1165,232 1065,259 965,232" class="ops"/>
+  <text x="1065" y="229" class="c s">image or file</text>
+  <text x="1065" y="243" class="c s">in payload?</text>
+  <path d="M1065 187V205" class="l"/>
+
+  <rect x="750" y="300" width="300" height="118" rx="6" class="ai"/>
+  <text x="900" y="322" class="c t" font-weight="700">Text agent  (vision=False)</text>
+  <text x="900" y="342" class="c t">MODEL_ID: eu.amazon.nova-pro-v1:0</text>
+  <text x="900" y="360" class="c s">ChatBedrockConverse + Guardrail</text>
+  <text x="900" y="376" class="c s">Used by ask_agent and plain prompts</text>
+  <text x="900" y="392" class="c s">Reasoning, calculation, browsing, tools</text>
+  <text x="900" y="408" class="c s">Cached per container (_agents[False])</text>
+
+  <rect x="1080" y="300" width="300" height="118" rx="6" class="ai"/>
+  <text x="1230" y="322" class="c t" font-weight="700">Vision agent  (vision=True)</text>
+  <text x="1230" y="342" class="c t">VISION_MODEL_ID: eu.amazon.nova-lite-v1:0</text>
+  <text x="1230" y="360" class="c s">ChatBedrockConverse + Guardrail</text>
+  <text x="1230" y="376" class="c s">Used by read_image and read_file</text>
+  <text x="1230" y="392" class="c s">Image block or document block + prompt</text>
+  <text x="1230" y="408" class="c s">Cached per container (_agents[True])</text>
+
+  <path d="M965 232H900V300" class="l"/><text x="925" y="226" class="c s">no</text>
+  <path d="M1165 232H1230V300" class="l"/><text x="1200" y="226" class="c s">yes</text>
+
+  <rect x="750" y="445" width="630" height="62" rx="6" class="ai"/>
+  <text x="765" y="466" class="t" font-weight="700">LangGraph create_agent — ReAct loop (graph.py, same system prompt for both)</text>
+  <text x="765" y="483" class="s">model → tool call? → run tool → observe → repeat → final answer.  Tool output treated as untrusted data.</text>
+  <text x="765" y="498" class="s">Checkpointer: AgentCoreMemorySaver(MEMORY_ID), falls back to in-process MemorySaver</text>
+  <path d="M900 418V445" class="l"/>
+  <path d="M1230 418V445" class="l"/>
+
+  <rect x="750" y="535" width="200" height="86" rx="6" class="ai"/>
+  <text x="850" y="556" class="c t" font-weight="700">run_python</text>
+  <text x="850" y="574" class="c s">AgentCore Code Interpreter</text>
+  <text x="850" y="590" class="c s">isolated sandbox</text>
+  <rect x="965" y="535" width="200" height="86" rx="6" class="ai"/>
+  <text x="1065" y="556" class="c t" font-weight="700">browse_page</text>
+  <text x="1065" y="574" class="c s">AgentCore Browser</text>
+  <text x="1065" y="590" class="c s">public page visible text</text>
+  <rect x="1180" y="535" width="200" height="86" rx="6" class="ai"/>
+  <text x="1280" y="556" class="c t" font-weight="700">say_hello (+ gateway tools)</text>
+  <text x="1280" y="574" class="c s">MCP client, SigV4 (AWS_IAM)</text>
+  <text x="1280" y="590" class="c s">GATEWAY_URL</text>
+  <path d="M850 507V535" class="l"/><path d="M1065 507V535" class="l"/><path d="M1280 507V535" class="l"/>
+
+  <!-- Outside runtime: gateway -> hello -->
+  <rect x="1180" y="690" width="200" height="46" rx="6" class="ai"/>
+  <text x="1280" y="710" class="c t">AgentCore Gateway (MCP)</text><text x="1280" y="725" class="c s">target: hello</text>
+  <rect x="1180" y="770" width="200" height="40" rx="6" class="lam"/>
+  <text x="1280" y="795" class="c t">Lambda: hello</text>
+  <path d="M1280 621V690" class="l"/><path d="M1280 736V770" class="l"/>
+  <text x="1295" y="660" class="s">tools/call</text>
+  <rect x="730" y="670" width="400" height="140" rx="6" class="ops"/>
+  <text x="745" y="692" class="t" font-weight="700">Guardrail + guarded models</text>
+  <text x="745" y="711" class="s">Bedrock Guardrail (GUARDRAIL_ID/VERSION) applied on both models,</text>
+  <text x="745" y="726" class="s">input and output. A block surfaces as isError + 422 in MCP.</text>
+  <text x="745" y="750" class="s">IAM: InvokeModel on eu inference profiles (pro + lite),</text>
+  <text x="745" y="765" class="s">ApplyGuardrail, gateway invoke, memory, code/browser sessions.</text>
+  <text x="745" y="789" class="s">Response returned to Lambda as stream → content[0].text</text>
+
+  <!-- ============ PANEL B ============ -->
+  <line x1="20" y1="840" x2="1400" y2="840" stroke="#ccd"/>
+  <text x="20" y="866" class="h">B. Request / prompt sequence (tools/call and session lifecycle)</text>
+
+  <g>
+    <rect x="30" y="880" width="120" height="34" rx="5" class="cli"/><text x="90" y="902" class="c t">MCP client</text>
+    <rect x="230" y="880" width="120" height="34" rx="5" class="lam"/><text x="290" y="902" class="c t">agent_mcp λ</text>
+    <rect x="410" y="880" width="120" height="34" rx="5" class="dat"/><text x="470" y="902" class="c t">DynamoDB</text>
+    <rect x="560" y="880" width="120" height="34" rx="5" class="dat"/><text x="620" y="902" class="c t">S3 uploads</text>
+    <rect x="700" y="880" width="120" height="34" rx="5" class="dat"/><text x="760" y="902" class="c t">SSM</text>
+    <rect x="880" y="880" width="120" height="34" rx="5" class="ai"/><text x="940" y="902" class="c t">AgentCore Runtime</text>
+    <rect x="1060" y="880" width="120" height="34" rx="5" class="ai"/><text x="1120" y="902" class="c t">Nova + Guardrail</text>
+    <rect x="1230" y="880" width="120" height="34" rx="5" class="ai"/><text x="1290" y="902" class="c t">Tools</text>
+  </g>
+  <g>
+    <line x1="90" y1="914" x2="90" y2="1290" class="life"/>
+    <line x1="290" y1="914" x2="290" y2="1290" class="life"/>
+    <line x1="470" y1="914" x2="470" y2="1290" class="life"/>
+    <line x1="620" y1="914" x2="620" y2="1290" class="life"/>
+    <line x1="760" y1="914" x2="760" y2="1290" class="life"/>
+    <line x1="940" y1="914" x2="940" y2="1290" class="life"/>
+    <line x1="1120" y1="914" x2="1120" y2="1290" class="life"/>
+    <line x1="1290" y1="914" x2="1290" y2="1290" class="life"/>
+  </g>
+
+  <!-- 1 session -->
+  <text x="20" y="940" class="s" font-weight="700">1 Session</text>
+  <path d="M90 952H290" class="m"/><text x="190" y="948" class="c s">initialize {protocolVersion}</text>
+  <path d="M290 968H470" class="m"/><text x="380" y="964" class="c s">put {session_id, runtime_session_id}</text>
+  <path d="M290 984H90" class="rt"/><text x="190" y="980" class="c s">200 + MCP-Session-Id</text>
+  <path d="M90 1000H290" class="m"/><text x="190" y="996" class="c s">initialized (202) · tools/list</text>
+
+  <!-- 2 upload -->
+  <text x="20" y="1024" class="s" font-weight="700">2 Upload</text>
+  <path d="M90 1036H290" class="m"/><text x="190" y="1032" class="c s">tools/call get_upload_url</text>
+  <path d="M290 1052H620" class="m"/><text x="455" y="1048" class="c s">presigned POST, key u/&lt;owner&gt;/&lt;uuid&gt;</text>
+  <path d="M290 1068H90" class="rt"/><text x="190" y="1064" class="c s">{url, fields, key}</text>
+  <path d="M90 1084H620" class="m"/><text x="355" y="1080" class="c s">POST file direct to S3 (SSE, ≤25MB)</text>
+
+  <!-- 3 prompt -->
+  <text x="20" y="1108" class="s" font-weight="700">3 Prompt</text>
+  <path d="M90 1120H290" class="m"/><text x="190" y="1116" class="c s">tools/call read_file {key, prompt}</text>
+  <path d="M290 1136H470" class="m"/><text x="380" y="1132" class="c s">check session active</text>
+  <path d="M290 1152H620" class="m"/><text x="455" y="1148" class="c s">head + get (owner prefix, type, size)</text>
+  <path d="M290 1168H760" class="m"/><text x="525" y="1164" class="c s">get runtime ARN</text>
+  <path d="M290 1184H940" class="m"/><text x="615" y="1180" class="c s">InvokeAgentRuntime {prompt, file} · runtimeSessionId</text>
+  <path d="M940 1200H1120" class="m"/><text x="1030" y="1196" class="c s">route → vision: Nova Lite</text>
+  <path d="M1120 1216H1290" class="m"/><text x="1205" y="1212" class="c s">ReAct tool calls</text>
+  <path d="M1290 1232H1120" class="rt"/><text x="1205" y="1228" class="c s">tool output</text>
+  <path d="M1120 1248H940" class="rt"/><text x="1030" y="1244" class="c s">answer / guardrail block</text>
+  <path d="M940 1264H290" class="rt"/><text x="615" y="1260" class="c s">stream response</text>
+  <path d="M290 1280H90" class="rt"/><text x="190" y="1276" class="c s">{content, structuredContent, isError}</text>
+
+  <text x="1010" y="1040" class="s">ask_agent: same path, no S3 steps → Nova Pro.</text>
+  <text x="1010" y="1056" class="s">read_image: image inline → no S3 steps → Nova Lite.</text>
+  <text x="1010" y="1072" class="s">DELETE /agent/mcp: removes the DynamoDB session.</text>
+  <text x="1010" y="1088" class="s">Solid = request · dashed green = response.</text>
+</svg>
