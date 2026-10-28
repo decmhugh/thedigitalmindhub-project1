@@ -12,5 +12,5 @@
 - [x] T10 Implement the browser upload flow in `src/agent_frontend/agent.html` (AC3, AC4b).
 - [x] T11 Add `infra/agent_uploads.tf` (bucket, encryption, public access block, TLS-only policy, CORS, 7-day lifecycle, upload-url Lambda and IAM), route throttle in `infra/main.tf`, and `UPLOAD_BUCKET` env/IAM for invoke and MCP Lambdas (AC8, AC10).
 - [x] T12 Run pytest (excluding the pre-existing IASA collection failures), `terraform fmt`, `terraform validate`; run tflint/checkov if installed.
-- [ ] T13 Generate the Terraform plan with AWS credentials and review it with the user; do not apply.
+- [x] T13 Generate the Terraform plan with AWS credentials and review it with the user; do not apply.
 - [ ] T14 After explicit apply approval and runtime redeploy, smoke-test browser and MCP uploads (image, PDF, docx, over-model-limit file) (AC1-10).
