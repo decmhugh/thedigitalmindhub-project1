@@ -60,7 +60,14 @@
     .message.agent { align-self: flex-start; border: 1px solid var(--line); background: white; }
     .message.user { align-self: flex-end; background: var(--user); }
     .empty-state { margin: auto; max-width: 320px; color: var(--muted); text-align: center; font-size: 14px; line-height: 1.6; }
-    .composer { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; padding: 16px 18px; border-top: 1px solid var(--line); }
+    .composer { display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 10px; padding: 16px 18px; border-top: 1px solid var(--line); }
+    .composer .attach { min-width: 44px; padding: 0 12px; }
+    .image-preview { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+    .image-preview[hidden] { display: none; }
+    .image-preview img { max-height: 64px; max-width: 96px; border: 1px solid var(--line); border-radius: 6px; }
+    .composer-error { grid-column: 1 / -1; margin: 0; color: var(--coral); font-size: 12px; }
+    .composer-error:empty { display: none; }
+    .message img { display: block; max-width: 100%; max-height: 220px; margin-bottom: 8px; border-radius: 6px; }
     .composer textarea { display: block; width: 100%; min-height: 44px; max-height: 140px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); }
     .composer .primary { min-width: 82px; }
     .auth { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 14px; max-width: 360px; margin: 0 auto; padding: 32px 24px; }
@@ -147,8 +154,15 @@
           <p id="empty-state" class="empty-state">Your conversation will appear here.</p>
         </div>
         <form id="prompt-form" class="composer">
+          <div id="image-preview" class="image-preview" hidden>
+            <img id="image-thumb" alt="Attached image preview">
+            <button id="remove-image-button" class="secondary" type="button">Remove</button>
+          </div>
+          <p id="image-error" class="composer-error" role="alert"></p>
+          <input id="image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+          <button id="attach-button" class="secondary attach" type="button" aria-label="Attach image">📎</button>
           <label class="sr-only" for="prompt">Message</label>
-          <textarea id="prompt" placeholder="Write a message…" rows="1" required></textarea>
+          <textarea id="prompt" placeholder="Write a message…" rows="1"></textarea>
           <button id="send-button" class="primary" type="submit">Send</button>
         </form>
         </div>
@@ -223,14 +237,55 @@
         .done(function () { show("chat"); })
         .fail(function () { show("phone"); });
 
-      function addMessage(kind, text) {
+      function addMessage(kind, text, imageUrl) {
         $("#empty-state").remove();
-        const message = $("<div>").addClass("message").addClass(kind).text(text);
+        const message = $("<div>").addClass("message").addClass(kind);
+        if (imageUrl) message.append($("<img>").attr({ src: imageUrl, alt: "Attached image" }));
+        message.append(document.createTextNode(text));
         $("#messages").append(message).scrollTop($("#messages")[0].scrollHeight);
       }
 
+      const imageTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+      const maxImageBytes = 3750000;
+      let attachedImage = null;
+
+      function clearImage() {
+        attachedImage = null;
+        $("#image-input").val("");
+        $("#image-thumb").removeAttr("src");
+        $("#image-preview").prop("hidden", true);
+      }
+
+      $("#attach-button").on("click", function () { $("#image-input").trigger("click"); });
+      $("#remove-image-button").on("click", function () { clearImage(); $("#image-error").text(""); });
+      $("#image-input").on("change", function () {
+        const file = this.files && this.files[0];
+        $("#image-error").text("");
+        if (!file) return;
+        if (imageTypes.indexOf(file.type) === -1) {
+          clearImage();
+          $("#image-error").text("Please choose a PNG, JPEG, GIF or WebP image.");
+          return;
+        }
+        if (file.size > maxImageBytes) {
+          clearImage();
+          $("#image-error").text("That image is too large. The limit is 3.75 MB.");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function () {
+          const url = String(reader.result);
+          attachedImage = { mediaType: file.type, data: url.slice(url.indexOf(",") + 1), url: url };
+          $("#image-thumb").attr("src", url);
+          $("#image-preview").prop("hidden", false);
+        };
+        reader.onerror = function () { clearImage(); $("#image-error").text("Could not read that image."); };
+        reader.readAsDataURL(file);
+      });
+
       $("#new-session-button").on("click", function () {
         startNewSession = true;
+        clearImage();
         $("#session-label").text("New session");
         $("#messages").empty().append($("<p>").attr("id", "empty-state").addClass("empty-state").text(emptyState));
         $("#prompt").trigger("focus");
@@ -239,12 +294,17 @@
       $("#prompt-form").on("submit", function (event) {
         event.preventDefault();
         const prompt = $("#prompt").val().trim();
-        if (!prompt || isSending) return;
-        addMessage("user", prompt);
+        if ((!prompt && !attachedImage) || isSending) return;
+        const image = attachedImage;
+        addMessage("user", prompt, image && image.url);
         $("#prompt").val("").trigger("focus");
+        clearImage();
+        $("#image-error").text("");
         isSending = true;
         $("#send-button").prop("disabled", true).text("…");
-        const payload = { prompt: prompt };
+        const payload = {};
+        if (prompt) payload.prompt = prompt;
+        if (image) payload.image = { mediaType: image.mediaType, data: image.data };
         if (startNewSession) payload.new_session = true;
         $.ajax({
           url: "/agent/invoke",
@@ -262,7 +322,9 @@
           }
           const message = xhr.status === 429
             ? "Too many requests. Please wait a moment and try again."
-            : "The agent could not complete that request. Try again.";
+            : xhr.status === 400
+              ? "That message or image could not be sent. Check the image and try again."
+              : "The agent could not complete that request. Try again.";
           addMessage("agent", message);
         }).always(function () {
           isSending = false;

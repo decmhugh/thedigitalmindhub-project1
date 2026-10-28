@@ -18,6 +18,27 @@ COOKIE_NAME = "agent_session"
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9-]{33,128}$")
 AUTH_COOKIE_NAME = "auth_session"
 AUTH_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
+DEFAULT_IMAGE_PROMPT = "Describe this image."
+IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+MAX_IMAGE_BYTES = 3_750_000
+
+
+def _valid_image(image: Any) -> dict[str, str] | None:
+    if not isinstance(image, dict):
+        return None
+    data = image.get("data")
+    media_type = image.get("mediaType")
+    if not isinstance(data, str) or not data or media_type not in IMAGE_MEDIA_TYPES:
+        return None
+    if len(data) > MAX_IMAGE_BYTES * 4 // 3 + 4:
+        return None
+    try:
+        decoded = base64.b64decode(data, validate=True)
+    except ValueError:
+        return None
+    if not decoded or len(decoded) > MAX_IMAGE_BYTES:
+        return None
+    return {"mediaType": media_type, "data": data}
 
 
 def _response(status_code: int, body: dict[str, Any], cookies: list[str] | None = None) -> dict[str, Any]:
@@ -125,8 +146,21 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _response(401, {"error": "Sign in required"})
 
     body = _body(event)
-    if body is None or not isinstance(body.get("prompt"), str) or not body["prompt"].strip():
+    if body is None:
         return _response(400, {"error": "A non-empty prompt is required"})
+    image = None
+    if body.get("image") is not None:
+        image = _valid_image(body["image"])
+        if image is None:
+            return _response(400, {"error": "A valid image is required"})
+    prompt = body.get("prompt")
+    if image is not None and (prompt is None or (isinstance(prompt, str) and not prompt.strip())):
+        prompt = DEFAULT_IMAGE_PROMPT
+    if not isinstance(prompt, str) or not prompt.strip():
+        return _response(400, {"error": "A non-empty prompt is required"})
+    agent_payload: dict[str, Any] = {"prompt": prompt}
+    if image is not None:
+        agent_payload["image"] = image
     new_session = body.get("new_session", False)
     if not isinstance(new_session, bool):
         return _response(400, {"error": "new_session must be a boolean"})
@@ -144,7 +178,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         result = boto3.client("bedrock-agentcore").invoke_agent_runtime(
             agentRuntimeArn=runtime_arn,
             runtimeSessionId=runtime_session_id,
-            payload=json.dumps({"prompt": body["prompt"]}).encode("utf-8"),
+            payload=json.dumps(agent_payload).encode("utf-8"),
             qualifier="DEFAULT",
         )
         text, blocked = _agent_text(result)

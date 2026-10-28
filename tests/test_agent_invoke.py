@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import io
 import json
@@ -219,3 +220,78 @@ def test_runtime_session_is_bound_to_user(monkeypatch):
     assert runtime.invoke_agent_runtime.call_args.kwargs["runtimeSessionId"] != runtime_session(SESSION)
     key = {"pk": {"S": "SESSION#" + hashlib.sha256(AUTH_TOKEN.encode()).hexdigest()}}
     assert runtime.ddb.get_item.call_args.kwargs["Key"] == key
+
+
+PNG_B64 = base64.b64encode(b"\x89PNG fake image bytes").decode()
+
+
+def image_body(**overrides):
+    body = {"prompt": "What is it?", "image": {"mediaType": "image/png", "data": PNG_B64}}
+    body.update(overrides)
+    return json.dumps(body)
+
+
+def test_image_is_forwarded_to_runtime(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
+        result = handler.lambda_handler(api_event(image_body()), None)
+
+    assert result["statusCode"] == 200
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload == {"prompt": "What is it?", "image": {"mediaType": "image/png", "data": PNG_B64}}
+
+
+@pytest.mark.parametrize("prompt", ["", "  ", None])
+def test_image_without_prompt_uses_default_prompt(monkeypatch, prompt):
+    runtime, client_patch = configure_clients(monkeypatch)
+    body = json.loads(image_body())
+    if prompt is None:
+        del body["prompt"]
+    else:
+        body["prompt"] = prompt
+    with client_patch:
+        result = handler.lambda_handler(api_event(json.dumps(body)), None)
+
+    assert result["statusCode"] == 200
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload["prompt"] == "Describe this image."
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "x",
+        {},
+        {"mediaType": "image/png"},
+        {"data": PNG_B64},
+        {"mediaType": "image/bmp", "data": PNG_B64},
+        {"mediaType": "image/png", "data": ""},
+        {"mediaType": "image/png", "data": "not base64!!"},
+        {"mediaType": "image/png", "data": base64.b64encode(b"x" * 3_750_001).decode()},
+    ],
+)
+def test_invalid_image_returns_400_without_invoking_runtime(monkeypatch, image):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
+        result = handler.lambda_handler(api_event(json.dumps({"prompt": "hi", "image": image})), None)
+
+    assert result["statusCode"] == 400
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_unauthenticated_image_request_returns_401(monkeypatch):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with client_patch:
+        result = handler.lambda_handler(api_event(image_body(), authed=False), None)
+
+    assert result["statusCode"] == 401
+    runtime.invoke_agent_runtime.assert_not_called()
+
+
+def test_image_request_logs_do_not_contain_image_or_prompt(monkeypatch, caplog):
+    runtime, client_patch = configure_clients(monkeypatch)
+    with caplog.at_level("INFO"), client_patch:
+        handler.lambda_handler(api_event(image_body(prompt="secret question")), None)
+
+    assert PNG_B64 not in caplog.text
+    assert "secret question" not in caplog.text

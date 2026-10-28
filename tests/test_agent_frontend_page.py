@@ -48,3 +48,18 @@ def test_page_posts_to_invoke_and_relies_on_session_cookie(html):
 
 def test_page_handles_rate_limit(html):
     assert "429" in html
+
+
+def test_page_has_image_attachment_controls(html):
+    assert 'type="file"' in html
+    assert 'accept="image/png,image/jpeg,image/gif,image/webp"' in html
+    assert 'id="attach-button"' in html
+    assert 'id="image-preview"' in html
+    assert 'id="remove-image-button"' in html
+
+
+def test_page_enforces_image_limits_and_sends_image(html):
+    assert "3750000" in html
+    assert "mediaType" in html
+    assert "payload.image" in html
+    assert "FileReader" in html
