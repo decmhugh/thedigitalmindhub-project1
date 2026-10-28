@@ -10,7 +10,7 @@ Provide a capable AI agent through an API for signed-in users (SMS login, spec 0
 
 - As a signed-in user, I want to submit a prompt and get the agent's reply.
 - As a signed-in user, I want my browser to retain conversation context in a cookie for the current browsing session.
-- As a signed-in user, I want to ask questions about the IASA corpus and receive answers grounded in retrieved source passages.
+- (Removed) IASA knowledge-base Q&A was dropped and never built.
 - As a user, I want the agent to call project tools, execute code, and browse the web when useful.
 - As an operator, I want safety filtering and operational telemetry while keeping prompt content out of logs.
 
@@ -54,12 +54,12 @@ Provide a capable AI agent through an API for signed-in users (SMS login, spec 0
 - AC12: API Gateway applies a rate limit of 2 requests per second and a burst limit of 5 to `POST /agent/invoke`; excess requests receive 429.
 - AC13: Each turn emits a trace with a non-secret correlation value, tool calls, latency, and token counts; raw cookies/session IDs are never logged.
 - AC14: Runtime ARN, memory ID, Gateway URL, and guardrail ID come from configuration, never hardcoded.
-- AC15: Terraform creates a dedicated private source S3 bucket and a separate S3 Vectors bucket/index in `eu-west-1`; it does not use or modify the existing `dmh-kb-docs` bucket, Aurora/RDS-backed Knowledge Bases, or Terraform state bucket.
-- AC16: A one-time recursive upload copies every file from `C:\Users\decla\OneDrive\Documents\IASA` into the new source bucket while preserving relative paths and never deleting remote objects.
-- AC17: The ingestion job extracts `.doc`, `.docx`, `.pdf`, `.pptx`, `.xlsx`, `.txt`, `.json`, `.msg`, `.vsdx`, `.jpg`, `.jpeg`, `.png`, and `.mp4` files. It uses parsers for office/text formats, Textract for images, and Transcribe for video audio; extraction failures are counted and reported without logging document contents.
-- AC18: Extracted text is chunked, embedded with Amazon Titan Text Embeddings V2 at 1024 dimensions, and indexed as `float32` vectors with cosine distance and source-key/page/slide/sheet metadata.
-- AC19: The agent has a `search_iasa_knowledge` tool that embeds a query with Titan, retrieves relevant S3 Vectors matches, and supplies their text and source references to Nova Pro. The agent must distinguish retrieved evidence from unsupported claims.
-- AC20: Signed-in users can query this corpus through the throttled `/agent/invoke` endpoint; retrieved text is never returned from a raw S3 object URL.
+- AC15: (Removed) IASA knowledge base dropped; not implemented.
+- AC16: (Removed) IASA knowledge base dropped; not implemented.
+- AC17: (Removed) IASA knowledge base dropped; not implemented.
+- AC18: (Removed) IASA knowledge base dropped; not implemented.
+- AC19: (Removed) IASA knowledge base dropped; not implemented.
+- AC20: (Removed) IASA knowledge base dropped; not implemented.
 
 ## Non-functional
 

@@ -47,7 +47,8 @@ Step "Generate SVG diagrams (docs/infrastructure.svg, docs/agent.svg)"
 python scripts/gen_diagrams.py
 Check "gen_diagrams"
 
-if ($BuildImage) { (S3 upload + CodeBuild)"
+if ($BuildImage) {
+    Step "Build agent image (S3 upload + CodeBuild)"
     $buildArgs = @{ Region = $Region }
     if ($Profile) { $buildArgs.Profile = $Profile }
     $output = & (Join-Path $root "scripts\build-agent-image.ps1") @buildArgs
@@ -58,7 +59,7 @@ if ($BuildImage) { (S3 upload + CodeBuild)"
 }
 
 Step "Terraform plan"
-terraform.exe -chdir=infra plan -var-file=env/dev.tfvars @extraVars -out dev.tfplan
+terraform.exe -chdir=infra plan "-var-file=env/dev.tfvars" @extraVars "-out=dev.tfplan"
 Check "terraform plan"
 
 if ($SkipApply) {

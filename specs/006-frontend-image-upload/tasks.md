@@ -5,5 +5,5 @@
 - [x] T3 Implement image validation and forwarding in `src/agent_invoke/handler.py` (AC4-9).
 - [x] T4 Implement attach/preview/remove/send UI in `src/agent_frontend/agent.html` (AC1-4).
 - [x] T5 Check CSP/headers in `src/agent_frontend/handler.py` allow `data:` images; adjust with a test if needed (AC3).
-- [x] T6 Run pytest (excluding the pre-existing IASA collection failures) and `terraform validate`; confirm no infra diff beyond spec 005.
+- [x] T6 Run pytest and `terraform validate`; confirm no infra diff beyond spec 005.
 - [ ] T7 After deploy approval, manually smoke-test upload in the browser (AC1-9).
