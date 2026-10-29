@@ -1,4 +1,5 @@
 import asyncio
+import re
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -153,10 +154,24 @@ def test_document_file_builds_named_file_block(media_type):
     asyncio.run(_handle_request(agent, payload, "session-a"))
 
     message = agent.ainvoke.call_args.args[0]["messages"][0]
-    assert message[1] == [
-        {"type": "text", "text": "Summarise"},
-        {"type": "file", "base64": "aGVsbG8=", "mime_type": media_type, "name": "document"},
-    ]
+    text_block, file_block = message[1]
+    assert text_block == {"type": "text", "text": "Summarise"}
+    assert file_block["type"] == "file"
+    assert file_block["base64"] == "aGVsbG8="
+    assert file_block["mime_type"] == media_type
+    assert re.fullmatch(r"document-[0-9a-f]{8}", file_block["name"])
+
+
+def test_each_document_gets_a_unique_name():
+    names = set()
+    for _ in range(20):
+        agent = Mock()
+        agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("summary")]})
+        payload = {"prompt": "Summarise", "file": {"mediaType": "application/pdf", "data": "aGVsbG8=", "kind": "document"}}
+        asyncio.run(_handle_request(agent, payload, "session-a"))
+        names.add(agent.ainvoke.call_args.args[0]["messages"][0][1][1]["name"])
+
+    assert len(names) == 20
 
 
 def test_image_file_builds_image_block():

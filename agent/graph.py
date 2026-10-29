@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 from langchain.agents import create_agent
@@ -32,8 +33,9 @@ def _attachment_block(attachment: Any, kind: str | None) -> dict[str, Any]:
     if media_type in IMAGE_MEDIA_TYPES and kind in (None, "image"):
         return {"type": "image", "base64": data, "mime_type": media_type}
     if media_type in DOCUMENT_MEDIA_TYPES and kind in (None, "document"):
-        # The filename is neutral so user-supplied names never reach the model.
-        return {"type": "file", "base64": data, "mime_type": media_type, "name": "document"}
+        # Bedrock rejects repeated document names in one conversation, and memory replays earlier turns.
+        # The name stays neutral and unique so user-supplied filenames never reach the model.
+        return {"type": "file", "base64": data, "mime_type": media_type, "name": f"document-{uuid.uuid4().hex[:8]}"}
     raise ValueError("attachment must include a supported mediaType")
 
 

@@ -10,7 +10,7 @@ Runs tests and Terraform checks, optionally builds the agent image (S3 upload + 
 
 1. Rebuild and deploy the agent image (`scripts/build-agent-image.ps1`, then set `agent_container_image_uri`). The image now runs under `opentelemetry-instrument`.
 2. Enable Transaction Search once per account/region:
-   `aws xray update-trace-segment-destination --destination CloudWatchLogs --region eu-west-1`
+   `aws xray get-trace-segment-destination --region eu-west-1` (only run `aws xray update-trace-segment-destination --destination CloudWatchLogs --region eu-west-1` if it isn't already `CloudWatchLogs`; deploy.ps1 does this check)
 3. Open CloudWatch > GenAI Observability > Bedrock AgentCore to see traces. No prompt or response content is captured.
 
 ## Evals
