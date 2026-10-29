@@ -21,7 +21,7 @@ All routes are JSON over HTTPS, one Lambda per route. The session token is an HT
 | ------ | ---- | ------- | ------- | ------ |
 | POST | /auth/start | `{"phone": "+<E.164>"}` | 200 `{"status": "code_sent"}`; same response whether or not the number is known | 400 invalid number; 429 throttled/too many codes; 502 SMS failure |
 | POST | /auth/verify | `{"phone": str, "code": str}` | 200 `{"authenticated": true}`; sets `auth_session` cookie (Secure, HttpOnly, SameSite=Strict, Path=/) | 400 malformed; 401 wrong/expired code; 429 too many attempts |
-| GET | /auth/session | none (cookie) | 200 `{"authenticated": true, "phone_masked": "+353*****1234"}` | 401 `{"authenticated": false}` |
+| GET | /auth/session | none (cookie) | 200 `{"authenticated": true, "phone_masked": "+353*****1234"}` or 200 `{"authenticated": false}` when there is no valid session (a status check, not an error) | 502 session store unavailable |
 | POST | /auth/logout | none (cookie) | 204; clears cookie | none (idempotent) |
 | POST | /agent/invoke | unchanged (spec 002) | unchanged | adds 401 when not signed in |
 
@@ -31,7 +31,7 @@ All routes are JSON over HTTPS, one Lambda per route. The session token is an HT
 - AC2: `POST /auth/start` rejects non-E.164 input with 400 and sends nothing.
 - AC3: `POST /auth/verify` with the correct, unexpired code returns 200 and sets the `auth_session` cookie; unknown users are registered on first successful verification.
 - AC4: Codes expire after 5 minutes, are single-use, and are locked after 5 failed attempts (401, then 429).
-- AC5: `GET /auth/session` returns 200 with a masked number when the cookie is valid and 401 otherwise; the full number is never returned.
+- AC5: `GET /auth/session` returns 200 with `authenticated: true` and a masked number when the cookie is valid, and 200 with `authenticated: false` otherwise (so signed-out page loads produce no browser console error); the full number is never returned.
 - AC6: `POST /auth/logout` invalidates the session and clears the cookie.
 - AC7: `POST /agent/invoke` returns 401 without a valid `auth_session`; the agent runtime session is bound to the authenticated user.
 - AC8: The page shows a phone-number form, then a code form, then chat; it checks `/auth/session` on load, handles 401/429, and uses no browser storage and never reads the cookie.

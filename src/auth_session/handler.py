@@ -29,7 +29,7 @@ def _cookie_token(event: dict[str, Any]) -> str | None:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    unauthenticated = _response(401, {"authenticated": False})
+    unauthenticated = _response(200, {"authenticated": False})
     token = _cookie_token(event)
     if token is None:
         return unauthenticated

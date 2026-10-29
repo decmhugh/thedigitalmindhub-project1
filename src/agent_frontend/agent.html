@@ -235,8 +235,8 @@
         });
       });
 
-      $.ajax({ url: "/auth/session", method: "GET", cache: false })
-        .done(function () { show("chat"); })
+      $.ajax({ url: "/auth/session", method: "GET", cache: false, dataType: "json" })
+        .done(function (data) { show(data && data.authenticated === true ? "chat" : "phone"); })
         .fail(function () { show("phone"); });
 
       function addMessage(kind, text, imageUrl) {
