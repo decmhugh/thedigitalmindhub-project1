@@ -11,7 +11,7 @@
 <rect width="1200" height="490" fill="#fafbfc"/>
 <text x="20" y="32" class="h">project1 - Agent architecture (generated from agent/ and infra/)</text>
 <text x="20" y="52" class="s">LangGraph tool-calling loop on Bedrock AgentCore Runtime</text>
-<rect x="20" y="242.0" width="150" height="46" rx="6" class="lam"/><text x="95.0" y="262.0" text-anchor="middle" class="t">agent-invoke</text><text x="95.0" y="278.0" text-anchor="middle" class="s">Lambda</text>
+<rect x="20" y="242.0" width="150" height="46" rx="6" class="lam"/><text x="95.0" y="262.0" text-anchor="middle" class="t">invoke-worker</text><text x="95.0" y="278.0" text-anchor="middle" class="s">Lambda (async)</text>
 <rect x="230" y="225.0" width="210" height="80" rx="6" class="ai"/><text x="335.0" y="262.0" text-anchor="middle" class="t">AgentCore Runtime</text><text x="335.0" y="278.0" text-anchor="middle" class="s">LangGraph create_agent loop</text>
 <path class="l" d="M170 265.0 C210 265.0 190 265.0 230 265.0"/>
 <rect x="20" y="325.0" width="150" height="46" rx="6" class="lam"/><text x="95.0" y="345.0" text-anchor="middle" class="t">agent-mcp</text><text x="95.0" y="361.0" text-anchor="middle" class="s">Lambda: /agent/mcp</text>

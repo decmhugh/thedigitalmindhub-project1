@@ -211,7 +211,7 @@ def agent_svg(blocks: list[dict]) -> str:
            '<text x="20" y="32" class="h">project1 - Agent architecture (generated from agent/ and infra/)</text>',
            '<text x="20" y="52" class="s">LangGraph tool-calling loop on Bedrock AgentCore Runtime</text>']
     mid = height / 2 + 20
-    svg.append(box(20, mid - 23, 150, 46, "lam", "agent-invoke", "Lambda"))
+    svg.append(box(20, mid - 23, 150, 46, "lam", "invoke-worker", "Lambda (async)"))
     svg.append(box(230, mid - 40, 210, 80, "ai", "AgentCore Runtime", "LangGraph create_agent loop"))
     svg.append(curve(170, mid, 230, mid))
     if "agent_mcp" in {b["name"] for b in blocks}:
@@ -256,7 +256,7 @@ def sequence_svg(blocks: list[dict]) -> str:
                   if b["name"] == "agent_invoke" and re.search(r'route_key\s*=\s*"([^"]+)"', b["body"])), "POST /agent/invoke")
     env = next((b["body"] for b in blocks if b["type"] == "aws_bedrockagentcore_agent_runtime"), "")
 
-    actors = [("user", "Browser"), ("api", "API Gateway"), ("lambda", "agent-invoke\nLambda"), ("ddb", "DynamoDB\n(auth)")]
+    actors = [("user", "Browser"), ("api", "API Gateway"), ("lambda", "agent-invoke\nLambda"), ("ddb", "DynamoDB\n(auth, jobs)"), ("worker", "invoke-worker\nLambda")]
     if "aws_s3_bucket" in types:
         actors.append(("s3", "S3 uploads"))
     actors.append(("runtime", "AgentCore\nRuntime"))
@@ -278,10 +278,14 @@ def sequence_svg(blocks: list[dict]) -> str:
         ("api", "lambda", "invoke (throttled)", False),
         ("lambda", "ddb", "validate auth_session cookie", False),
         ("ddb", "lambda", "user (phone hash)", True),
+        ("lambda", "ddb", "take session lock, write job (pending)", False),
+        ("lambda", "worker", "async invoke (Event)", False),
+        ("lambda", "api", "202 {job_id} | 409 busy", True),
+        ("api", "user", "browser polls GET /agent/jobs/{id} every 2-5 s", True),
     ]
     if "s3" in x:
-        messages += [("lambda", "s3", "if file: check owner prefix, type, size; read", False), ("s3", "lambda", "file bytes (base64)", True)]
-    messages.append(("lambda", "runtime", "InvokeAgentRuntime (session = hash(user, cookie))", False))
+        messages += [("worker", "s3", "if file: read (owner prefix checked by invoke)", False), ("s3", "worker", "file bytes (base64)", True)]
+    messages.append(("worker", "runtime", "InvokeAgentRuntime (session = hash(user, cookie))", False))
     if "memory" in x:
         messages += [("runtime", "memory", "load conversation checkpoint", False), ("memory", "runtime", "prior messages", True)]
     messages.append(("runtime", "model", "Converse: history + prompt (+ image/document block)", False))
@@ -300,9 +304,11 @@ def sequence_svg(blocks: list[dict]) -> str:
     loop_to = len(messages)
     if "memory" in x:
         messages.append(("runtime", "memory", "save checkpoint", False))
-    messages += [("runtime", "lambda", "response or blocked flag", True),
-                 ("lambda", "api", "200 | 422 blocked | 413 too large | 502/504", True),
-                 ("api", "user", "JSON response shown in chat", True)]
+    messages += [("runtime", "worker", "response or blocked flag", True),
+                 ("worker", "ddb", "save result (done | failed), release lock", False),
+                 ("user", "api", "GET /agent/jobs/{id}", False),
+                 ("api", "ddb", "read job (via status Lambda)", False),
+                 ("api", "user", "200 done: response shown in chat", True)]
 
     top, row = 135, 46
     height = top + len(messages) * row + 50

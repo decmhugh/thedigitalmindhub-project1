@@ -258,6 +258,7 @@
         docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       };
       const maxFileBytes = 26214400;
+      const pollLimitMs = 300000;
       let attachedFile = null;
       let uploadXhr = null;
       let isUploading = false;
@@ -380,31 +381,70 @@
         if (prompt) payload.prompt = prompt;
         if (file) payload.file = { key: file.key, name: file.name };
         if (startNewSession) payload.new_session = true;
+        const finish = function () {
+          isSending = false;
+          $("#send-button").prop("disabled", isUploading).text("Send");
+        };
+        const failMessage = function (status) {
+          return status === 429
+            ? "Too many requests. Please wait a moment and try again."
+            : status === 409
+              ? "Still working on your last request. Please wait for it to finish."
+              : status === 413
+                ? "That file is too large for the model. Try a smaller file (images up to 3.75 MB, documents up to 4.5 MB)."
+                : status === 400
+                  ? "That message or file could not be sent. Check the file and try again."
+                  : "The agent could not complete that request. Try again.";
+        };
+        const poll = function (jobId, startedAt) {
+          const elapsed = Date.now() - startedAt;
+          if (elapsed > pollLimitMs) {
+            addMessage("agent", "The agent is taking too long. Try again.");
+            finish();
+            return;
+          }
+          setTimeout(function () {
+            $.ajax({ url: "/agent/jobs/" + encodeURIComponent(jobId), method: "GET" }).done(function (job) {
+              if (job.status === "done") {
+                startNewSession = false;
+                $("#session-label").text("Session active");
+                addMessage("agent", job.response);
+                finish();
+              } else if (job.status === "failed") {
+                addMessage("agent", failMessage(job.http_status));
+                finish();
+              } else {
+                poll(jobId, startedAt);
+              }
+            }).fail(function (xhr) {
+              if (xhr.status === 401) {
+                show("phone");
+              } else {
+                addMessage("agent", failMessage(xhr.status));
+              }
+              finish();
+            });
+          }, elapsed > 30000 ? 5000 : 2000);
+        };
         $.ajax({
           url: "/agent/invoke",
           method: "POST",
           contentType: "application/json",
           data: JSON.stringify(payload)
         }).done(function (result) {
-          startNewSession = false;
-          $("#session-label").text("Session active");
-          addMessage("agent", result.response);
+          if (result && result.job_id) {
+            poll(result.job_id, Date.now());
+          } else {
+            addMessage("agent", failMessage(502));
+            finish();
+          }
         }).fail(function (xhr) {
           if (xhr.status === 401) {
             show("phone");
-            return;
+          } else {
+            addMessage("agent", failMessage(xhr.status));
           }
-          const message = xhr.status === 429
-            ? "Too many requests. Please wait a moment and try again."
-            : xhr.status === 413
-              ? "That file is too large for the model. Try a smaller file (images up to 3.75 MB, documents up to 4.5 MB)."
-              : xhr.status === 400
-                ? "That message or file could not be sent. Check the file and try again."
-                : "The agent could not complete that request. Try again.";
-          addMessage("agent", message);
-        }).always(function () {
-          isSending = false;
-          $("#send-button").prop("disabled", isUploading).text("Send");
+          finish();
         });
       });
     });

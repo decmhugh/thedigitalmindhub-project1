@@ -46,6 +46,12 @@ def test_page_posts_to_invoke_and_relies_on_session_cookie(html):
     assert "document.cookie" not in html.lower()
 
 
+def test_page_polls_job_status_after_invoke(html):
+    assert "/agent/jobs/" in html
+    assert "job_id" in html
+    assert "409" in html
+
+
 def test_page_handles_rate_limit(html):
     assert "429" in html
 

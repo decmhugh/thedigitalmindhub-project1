@@ -63,7 +63,7 @@ Provide a capable AI agent through an API for signed-in users (SMS login, spec 0
 
 ## Non-functional
 
-- Invoke Lambda: timeout 60 s, 256 MB. Agent turn budget: 55 s.
+- Invoke Lambda: timeout 10 s, 256 MB; it only queues the job. Superseded by spec 011: `POST /agent/invoke` now returns `202 {"job_id"}` (409 if a request is already running) and the result is read from `GET /agent/jobs/{job_id}`; the worker Lambda runs the agent turn (timeout 300 s).
 - Prompts, responses, raw cookies, and session IDs are not logged; log a non-reversible session correlation value, status, latency, and token counts.
 - Tool access is least privilege: the agent only reaches Gateway targets listed in Terraform.
 - Web browsing and code execution run only in AgentCore sandboxes.
