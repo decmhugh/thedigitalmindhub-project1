@@ -42,7 +42,13 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 5
   }
 
-  depends_on = [module.agent_invoke, module.agent_mcp, module.agent_upload_url, module.auth_start, module.auth_verify]
+  route_settings {
+    route_key              = "GET /agent/jobs/{job_id}"
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
+  }
+
+  depends_on = [module.agent_invoke, module.agent_job_status, module.agent_mcp, module.agent_upload_url, module.auth_start, module.auth_verify]
 }
 
 module "hello" {

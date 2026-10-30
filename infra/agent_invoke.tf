@@ -15,23 +15,18 @@ resource "aws_ssm_parameter" "agent_runtime_arn" {
 
 data "aws_iam_policy_document" "agent_invoke" {
   statement {
-    actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
-    resources = [local.agent_runtime_arn, "${local.agent_runtime_arn}/runtime-endpoint/*"]
+    actions   = ["lambda:InvokeFunction"]
+    resources = [module.agent_invoke_worker.function_arn]
   }
 
   statement {
-    actions   = ["ssm:GetParameter"]
-    resources = ["arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.agent_ssm_name}"]
+    actions   = ["dynamodb:PutItem", "dynamodb:DeleteItem"]
+    resources = [aws_dynamodb_table.agent_jobs.arn]
   }
 
   statement {
     actions   = ["dynamodb:GetItem"]
     resources = [aws_dynamodb_table.auth.arn]
-  }
-
-  statement {
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.agent_uploads.arn}/u/*"]
   }
 }
 
@@ -42,13 +37,13 @@ module "agent_invoke" {
   route_key    = "POST /agent/invoke"
   api_id       = aws_apigatewayv2_api.this.id
   api_exec_arn = aws_apigatewayv2_api.this.execution_arn
-  timeout      = 60
+  timeout      = 10
   memory_size  = 256
   environment = {
-    AGENT_RUNTIME_ARN_PARAM = local.agent_ssm_name
-    AUTH_TABLE              = aws_dynamodb_table.auth.name
-    UPLOAD_BUCKET           = aws_s3_bucket.agent_uploads.bucket
-    LOG_LEVEL               = "INFO"
+    AUTH_TABLE           = aws_dynamodb_table.auth.name
+    JOBS_TABLE           = aws_dynamodb_table.agent_jobs.name
+    WORKER_FUNCTION_NAME = module.agent_invoke_worker.function_name
+    LOG_LEVEL            = "INFO"
   }
   enable_custom_policy = true
   policy_json          = data.aws_iam_policy_document.agent_invoke.json
