@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1587 1243" font-family="Segoe UI, Arial, sans-serif" font-size="12">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#445"/></marker>
+<style>
+.box{fill:#fff;stroke:#232f3e;stroke-width:1.5}.lam{fill:#fff4e5;stroke:#e07b00;stroke-width:1.5}
+.dat{fill:#e8f5e9;stroke:#2e7d32;stroke-width:1.5}.ai{fill:#f3e8ff;stroke:#7b1fa2;stroke-width:1.5}
+.ops{fill:#e8f0fe;stroke:#1a56db;stroke-width:1.5}.t{fill:#232f3e}.s{fill:#556;font-size:11px}
+.h{font-weight:700;font-size:20px;fill:#232f3e}.c{font-weight:700;fill:#556;font-size:12px}
+.l{stroke:#445;stroke-width:1.3;fill:none;marker-end:url(#a)}
+</style></defs>
+<rect width="1587" height="1243" fill="#fafbfc"/>
+<text x="20" y="30" class="h">project1 - Sequence: user input to model invocation (generated)</text>
+<text x="20" y="50" class="s">Solid = request, dashed = response. Prompts and session IDs are never logged.</text>
+<rect x="135" y="62" width="110" height="35" rx="6" class="box"/>
+<text x="190" y="80" text-anchor="middle" class="t">Browser</text>
+<path d="M190 99 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="262" y="62" width="110" height="35" rx="6" class="box"/>
+<text x="317" y="80" text-anchor="middle" class="t">API Gateway</text>
+<path d="M317 99 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="389" y="62" width="110" height="50" rx="6" class="lam"/>
+<text x="444" y="80" text-anchor="middle" class="t">agent-invoke</text>
+<text x="444" y="95" text-anchor="middle" class="t">Lambda</text>
+<path d="M444 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="516" y="62" width="110" height="50" rx="6" class="box"/>
+<text x="571" y="80" text-anchor="middle" class="t">DynamoDB</text>
+<text x="571" y="95" text-anchor="middle" class="t">(auth)</text>
+<path d="M571 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="643" y="62" width="110" height="35" rx="6" class="box"/>
+<text x="698" y="80" text-anchor="middle" class="t">S3 uploads</text>
+<path d="M698 99 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="770" y="62" width="110" height="50" rx="6" class="ai"/>
+<text x="825" y="80" text-anchor="middle" class="t">AgentCore</text>
+<text x="825" y="95" text-anchor="middle" class="t">Runtime</text>
+<path d="M825 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="897" y="62" width="110" height="50" rx="6" class="ai"/>
+<text x="952" y="80" text-anchor="middle" class="t">AgentCore</text>
+<text x="952" y="95" text-anchor="middle" class="t">Memory</text>
+<path d="M952 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="1024" y="62" width="110" height="50" rx="6" class="ai"/>
+<text x="1079" y="80" text-anchor="middle" class="t">Bedrock model</text>
+<text x="1079" y="95" text-anchor="middle" class="t">+ Guardrail</text>
+<path d="M1079 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="1151" y="62" width="110" height="50" rx="6" class="box"/>
+<text x="1206" y="80" text-anchor="middle" class="t">Code Interpreter</text>
+<text x="1206" y="95" text-anchor="middle" class="t">/ Browser</text>
+<path d="M1206 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="1278" y="62" width="110" height="50" rx="6" class="box"/>
+<text x="1333" y="80" text-anchor="middle" class="t">AgentCore</text>
+<text x="1333" y="95" text-anchor="middle" class="t">Gateway (MCP)</text>
+<path d="M1333 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="1405" y="62" width="110" height="50" rx="6" class="box"/>
+<text x="1460" y="80" text-anchor="middle" class="t">Tool Lambda</text>
+<text x="1460" y="95" text-anchor="middle" class="t">(hello)</text>
+<path d="M1460 114 V1223" stroke="#aab" stroke-dasharray="4 4" fill="none"/>
+<rect x="805" y="599" width="675" height="390" fill="none" stroke="#7b1fa2" stroke-dasharray="6 4"/>
+<text x="811" y="611" class="c">loop while the model asks for tools</text>
+<path d="M190 135 H317" class="l"/>
+<text x="253.5" y="129" text-anchor="middle" class="t">1. POST /agent/invoke (prompt, file?)</text>
+<path d="M317 181 H444" class="l"/>
+<text x="380.5" y="175" text-anchor="middle" class="t">2. invoke (throttled)</text>
+<path d="M444 227 H571" class="l"/>
+<text x="507.5" y="221" text-anchor="middle" class="t">3. validate auth_session cookie</text>
+<path d="M571 273 H444" class="l" stroke-dasharray="6 4"/>
+<text x="507.5" y="267" text-anchor="middle" class="t">4. user (phone hash)</text>
+<path d="M444 319 H698" class="l"/>
+<text x="571.0" y="313" text-anchor="middle" class="t">5. if file: check owner prefix, type, size; read</text>
+<path d="M698 365 H444" class="l" stroke-dasharray="6 4"/>
+<text x="571.0" y="359" text-anchor="middle" class="t">6. file bytes (base64)</text>
+<path d="M444 411 H825" class="l"/>
+<text x="634.5" y="405" text-anchor="middle" class="t">7. InvokeAgentRuntime (session = hash(user, cookie))</text>
+<path d="M825 457 H952" class="l"/>
+<text x="888.5" y="451" text-anchor="middle" class="t">8. load conversation checkpoint</text>
+<path d="M952 503 H825" class="l" stroke-dasharray="6 4"/>
+<text x="888.5" y="497" text-anchor="middle" class="t">9. prior messages</text>
+<path d="M825 549 H1079" class="l"/>
+<text x="952.0" y="543" text-anchor="middle" class="t">10. Converse: history + prompt (+ image/document block)</text>
+<path d="M1079 595 H825" class="l" stroke-dasharray="6 4"/>
+<text x="952.0" y="589" text-anchor="middle" class="t">11. answer, or tool call</text>
+<path d="M825 641 H1206" class="l"/>
+<text x="1015.5" y="635" text-anchor="middle" class="t">12. direct SDK call: run_python, browse_page</text>
+<path d="M1206 687 H825" class="l" stroke-dasharray="6 4"/>
+<text x="1015.5" y="681" text-anchor="middle" class="t">13. tool result (untrusted data)</text>
+<path d="M825 733 H1333" class="l"/>
+<text x="1079.0" y="727" text-anchor="middle" class="t">14. MCP tools/call: say_hello (SigV4)</text>
+<path d="M1333 779 H1460" class="l"/>
+<text x="1396.5" y="773" text-anchor="middle" class="t">15. lambda:Invoke</text>
+<path d="M1460 825 H1333" class="l" stroke-dasharray="6 4"/>
+<text x="1396.5" y="819" text-anchor="middle" class="t">16. result</text>
+<path d="M1333 871 H825" class="l" stroke-dasharray="6 4"/>
+<text x="1079.0" y="865" text-anchor="middle" class="t">17. MCP tool result (untrusted data)</text>
+<path d="M825 917 H1079" class="l"/>
+<text x="952.0" y="911" text-anchor="middle" class="t">18. Converse: tool result</text>
+<path d="M1079 963 H825" class="l" stroke-dasharray="6 4"/>
+<text x="952.0" y="957" text-anchor="middle" class="t">19. final answer</text>
+<path d="M825 1009 H952" class="l"/>
+<text x="888.5" y="1003" text-anchor="middle" class="t">20. save checkpoint</text>
+<path d="M825 1055 H444" class="l" stroke-dasharray="6 4"/>
+<text x="634.5" y="1049" text-anchor="middle" class="t">21. response or blocked flag</text>
+<path d="M444 1101 H317" class="l" stroke-dasharray="6 4"/>
+<text x="380.5" y="1095" text-anchor="middle" class="t">22. 200 | 422 blocked | 413 too large | 502/504</text>
+<path d="M317 1147 H190" class="l" stroke-dasharray="6 4"/>
+<text x="253.5" y="1141" text-anchor="middle" class="t">23. JSON response shown in chat</text>
+</svg>

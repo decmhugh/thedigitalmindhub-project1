@@ -200,7 +200,7 @@ def agent_svg(blocks: list[dict]) -> str:
     for _, backend in tool_nodes:
         if backend not in [b for b in backends]:
             backends.append(backend)
-    backend_label = {"via Gateway": ("ai", "AgentCore Gateway", "MCP -> Lambda"),
+    backend_label = {"via Gateway": ("ai", "AgentCore Gateway (MCP)", "MCP server -> Lambda"),
                      "Code Interpreter": ("ai", "Code Interpreter", "isolated sandbox"),
                      "Browser": ("ai", "AgentCore Browser", "sandboxed browsing")}
 
@@ -214,7 +214,11 @@ def agent_svg(blocks: list[dict]) -> str:
     svg.append(box(20, mid - 23, 150, 46, "lam", "agent-invoke", "Lambda"))
     svg.append(box(230, mid - 40, 210, 80, "ai", "AgentCore Runtime", "LangGraph create_agent loop"))
     svg.append(curve(170, mid, 230, mid))
-
+    if "agent_mcp" in {b["name"] for b in blocks}:
+        svg.append(box(20, mid + 60, 150, 46, "lam", "agent-mcp", "Lambda: /agent/mcp"))
+        svg.append(box(20, mid + 125, 150, 46, "box", "External MCP client", "inbound (we are server)"))
+        svg.append(curve(95, mid + 125, 95, mid + 106))
+        svg.append(curve(170, mid + 83, 230, mid + 20))
     column_x = {"models": 520, "tools": 760, "backends": 990}
     svg.append(f'<text x="{column_x["models"]}" y="84" class="c">Models &amp; safety</text>')
     svg.append(f'<text x="{column_x["tools"]}" y="84" class="c">Tools</text>')
@@ -241,6 +245,127 @@ def agent_svg(blocks: list[dict]) -> str:
     return "\n".join(svg)
 
 
+def sequence_svg(blocks: list[dict]) -> str:
+    """User input -> model invocation. Participants and tool calls come from Terraform and agent/tools.py."""
+    types = {b["type"] for b in blocks}
+    modules = {b["name"] for b in blocks if b["kind"] == "module"}
+    local_tools = re.findall(r"@tool\s+(?:async\s+)?def (\w+)\(", read(ROOT / "agent" / "tools.py"))
+    gateway_tools = re.findall(r'name\s*=\s*"(\w+)"\s*\n\s*description[^\n]*\n\s*\n?\s*input_schema', "\n".join(b["body"] for b in blocks))
+    tools = local_tools + gateway_tools
+    route = next((re.search(r'route_key\s*=\s*"([^"]+)"', b["body"]).group(1) for b in blocks
+                  if b["name"] == "agent_invoke" and re.search(r'route_key\s*=\s*"([^"]+)"', b["body"])), "POST /agent/invoke")
+    env = next((b["body"] for b in blocks if b["type"] == "aws_bedrockagentcore_agent_runtime"), "")
+
+    actors = [("user", "Browser"), ("api", "API Gateway"), ("lambda", "agent-invoke\nLambda"), ("ddb", "DynamoDB\n(auth)")]
+    if "aws_s3_bucket" in types:
+        actors.append(("s3", "S3 uploads"))
+    actors.append(("runtime", "AgentCore\nRuntime"))
+    if "aws_bedrockagentcore_memory" in types:
+        actors.append(("memory", "AgentCore\nMemory"))
+    actors.append(("model", "Bedrock model" + ("\n+ Guardrail" if "GUARDRAIL_ID" in env else "")))
+    if local_tools:
+        actors.append(("tools", "Code Interpreter\n/ Browser"))
+    if gateway_tools:
+        actors.append(("gateway", "AgentCore\nGateway (MCP)"))
+        actors.append(("hello", "Tool Lambda\n(hello)"))
+    last_actor = actors[-1][0]
+
+    step = max(1400 // len(actors), 120)
+    x = {key: 190 + i * step for i, (key, _) in enumerate(actors)}
+    width = 190 + len(actors) * step
+    messages = [
+        ("user", "api", f"{route} (prompt, file?)", False),
+        ("api", "lambda", "invoke (throttled)", False),
+        ("lambda", "ddb", "validate auth_session cookie", False),
+        ("ddb", "lambda", "user (phone hash)", True),
+    ]
+    if "s3" in x:
+        messages += [("lambda", "s3", "if file: check owner prefix, type, size; read", False), ("s3", "lambda", "file bytes (base64)", True)]
+    messages.append(("lambda", "runtime", "InvokeAgentRuntime (session = hash(user, cookie))", False))
+    if "memory" in x:
+        messages += [("runtime", "memory", "load conversation checkpoint", False), ("memory", "runtime", "prior messages", True)]
+    messages.append(("runtime", "model", "Converse: history + prompt (+ image/document block)", False))
+    messages.append(("model", "runtime", "answer, or tool call", True))
+    loop_from = len(messages)
+    if tools:
+        if local_tools:
+            messages += [("runtime", "tools", "direct SDK call: " + ", ".join(local_tools), False),
+                         ("tools", "runtime", "tool result (untrusted data)", True)]
+        if gateway_tools:
+            messages += [("runtime", "gateway", "MCP tools/call: " + ", ".join(gateway_tools) + " (SigV4)", False),
+                         ("gateway", "hello", "lambda:Invoke", False),
+                         ("hello", "gateway", "result", True),
+                         ("gateway", "runtime", "MCP tool result (untrusted data)", True)]
+        messages += [("runtime", "model", "Converse: tool result", False), ("model", "runtime", "final answer", True)]
+    loop_to = len(messages)
+    if "memory" in x:
+        messages.append(("runtime", "memory", "save checkpoint", False))
+    messages += [("runtime", "lambda", "response or blocked flag", True),
+                 ("lambda", "api", "200 | 422 blocked | 413 too large | 502/504", True),
+                 ("api", "user", "JSON response shown in chat", True)]
+
+    top, row = 135, 46
+    height = top + len(messages) * row + 50
+    svg = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" font-family="Segoe UI, Arial, sans-serif" font-size="12">', STYLE,
+           f'<rect width="{width}" height="{height}" fill="#fafbfc"/>',
+           '<text x="20" y="30" class="h">project1 - Sequence: user input to model invocation (generated)</text>',
+           '<text x="20" y="50" class="s">Solid = request, dashed = response. Prompts and session IDs are never logged.</text>']
+    for key, label in actors:
+        lines = label.split("\n")
+        svg.append(f'<rect x="{x[key] - 55}" y="62" width="110" height="{20 + 15 * len(lines)}" rx="6" class="{"ai" if key in ("runtime", "memory", "model") else "lam" if key == "lambda" else "box"}"/>')
+        for i, line in enumerate(lines):
+            svg.append(f'<text x="{x[key]}" y="{80 + 15 * i}" text-anchor="middle" class="t">{escape(line)}</text>')
+        svg.append(f'<path d="M{x[key]} {64 + 20 + 15 * len(lines)} V{height - 20}" stroke="#aab" stroke-dasharray="4 4" fill="none"/>')
+    if tools:
+        y1, y2 = top + loop_from * row - 42, top + loop_to * row - 24
+        svg.append(f'<rect x="{x["runtime"] - 20}" y="{y1}" width="{x[last_actor] - x["runtime"] + 40}" height="{y2 - y1 + 4}" fill="none" stroke="#7b1fa2" stroke-dasharray="6 4"/>')
+        svg.append(f'<text x="{x["runtime"] - 14}" y="{y1 + 12}" class="c">loop while the model asks for tools</text>')
+    for i, (src, dst, label, dashed) in enumerate(messages):
+        y = top + i * row
+        style = ' stroke-dasharray="6 4"' if dashed else ""
+        svg.append(f'<path d="M{x[src]} {y} H{x[dst]}" class="l"{style}/>')
+        svg.append(f'<text x="{(x[src] + x[dst]) / 2}" y="{y - 6}" text-anchor="middle" class="t">{i + 1}. {escape(label)}</text>')
+    svg.append("</svg>")
+    return "\n".join(svg)
+
+
+def mcp_sequence_svg(blocks: list[dict]) -> str:
+    """Inbound MCP: an external MCP client calls the agent through the agent-mcp Lambda."""
+    handler = read(ROOT / "src" / "agent_mcp" / "handler.py")
+    names = re.findall(r'^(?:TOOL_NAME|IMAGE_TOOL_NAME|UPLOAD_URL_TOOL_NAME|FILE_TOOL_NAME)\s*=\s*"([^"]+)"', handler, re.M)
+    route = next((re.search(r'route_key\s*=\s*"([^"]+)"', b["body"]).group(1) for b in blocks
+                  if b["name"] == "agent_mcp" and re.search(r'route_key\s*=\s*"([^"]+)"', b["body"])), "ANY /agent/mcp")
+    actors = [("c", "External\nMCP client"), ("api", "API Gateway"), ("l", "agent-mcp\nLambda"), ("d", "DynamoDB\n(MCP sessions)"),
+              ("r", "AgentCore\nRuntime"), ("m", "Bedrock model\n(+ tools)")]
+    x = {k: 170 + i * 190 for i, (k, _) in enumerate(actors)}
+    width = 170 + len(actors) * 190
+    messages = [("c", "api", f"{route}: initialize", False), ("api", "l", "invoke", False), ("l", "d", "create MCP session", False),
+                ("l", "c", "Mcp-Session-Id + server info", True), ("c", "l", "tools/list", False),
+                ("l", "c", "tools: " + (", ".join(names) or "agent tools"), True), ("c", "l", "tools/call (prompt, file?)", False),
+                ("l", "d", "validate session", False), ("l", "r", "InvokeAgentRuntime (same path as chat)", False),
+                ("r", "m", "Converse + tool loop (see sequence.svg)", False), ("m", "r", "answer", True),
+                ("r", "l", "response", True), ("l", "c", "MCP result (text)", True)]
+    top, row = 135, 46
+    height = top + len(messages) * row + 40
+    svg = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" font-family="Segoe UI, Arial, sans-serif" font-size="12">', STYLE,
+           f'<rect width="{width}" height="{height}" fill="#fafbfc"/>',
+           '<text x="20" y="30" class="h">project1 - Sequence: inbound MCP (external client to agent, generated)</text>',
+           '<text x="20" y="50" class="s">The agent also serves MCP: clients connect to /agent/mcp. Outbound MCP (agent to Gateway tools) is in sequence.svg.</text>']
+    for key, label in actors:
+        lines = label.split("\n")
+        svg.append(f'<rect x="{x[key] - 55}" y="62" width="110" height="{20 + 15 * len(lines)}" rx="6" class="{"ai" if key in ("r", "m") else "lam" if key == "l" else "box"}"/>')
+        for i, line in enumerate(lines):
+            svg.append(f'<text x="{x[key]}" y="{80 + 15 * i}" text-anchor="middle" class="t">{escape(line)}</text>')
+        svg.append(f'<path d="M{x[key]} {84 + 15 * len(lines)} V{height - 20}" stroke="#aab" stroke-dasharray="4 4" fill="none"/>')
+    for i, (src, dst, label, dashed) in enumerate(messages):
+        y = top + i * row
+        style = ' stroke-dasharray="6 4"' if dashed else ""
+        svg.append(f'<path d="M{x[src]} {y} H{x[dst]}" class="l"{style}/>')
+        svg.append(f'<text x="{(x[src] + x[dst]) / 2}" y="{y - 6}" text-anchor="middle" class="t">{i + 1}. {escape(label)}</text>')
+    svg.append("</svg>")
+    return "\n".join(svg)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=str(ROOT / "docs"))
@@ -250,7 +375,9 @@ def main(argv=None) -> int:
     blocks = parse_blocks(ROOT / "infra")
     (out / "infrastructure.svg").write_text(infrastructure_svg(blocks), encoding="utf-8")
     (out / "agent.svg").write_text(agent_svg(blocks), encoding="utf-8")
-    print(f"Wrote {out / 'infrastructure.svg'} and {out / 'agent.svg'}")
+    (out / "sequence.svg").write_text(sequence_svg(blocks), encoding="utf-8")
+    (out / "sequence-mcp.svg").write_text(mcp_sequence_svg(blocks), encoding="utf-8")
+    print(f"Wrote infrastructure.svg, agent.svg, sequence.svg and sequence-mcp.svg to {out}")
     return 0
 
 

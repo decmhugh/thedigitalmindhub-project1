@@ -43,7 +43,7 @@ if (-not $SkipChecks) {
     Check "terraform init"
 }
 
-Step "Generate SVG diagrams (docs/infrastructure.svg, docs/agent.svg)"
+Step "Generate SVG diagrams (docs/*.svg)"
 python scripts/gen_diagrams.py
 Check "gen_diagrams"
 
@@ -102,14 +102,8 @@ foreach ($file in Get-ChildItem -Path $sourceDirectory -Filter "*.html" -File) {
 }
 
 Step "Enable X-Ray Transaction Search (idempotent)"
-$destination = aws xray get-trace-segment-destination --region $Region --query Destination --output text
-Check "get-trace-segment-destination"
-if ($destination -eq "CloudWatchLogs") {
-    Write-Host "Transaction Search already enabled"
-} else {
-    aws xray update-trace-segment-destination --destination CloudWatchLogs --region $Region | Out-Null
-    Check "update-trace-segment-destination"
-}
+aws xray update-trace-segment-destination --destination CloudWatchLogs --region $Region | Out-Null
+Check "update-trace-segment-destination"
 
 if ($RunEvals) {
     Step "Run agent evals"

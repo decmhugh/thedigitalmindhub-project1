@@ -14,6 +14,10 @@
 <rect x="20" y="242.0" width="150" height="46" rx="6" class="lam"/><text x="95.0" y="262.0" text-anchor="middle" class="t">agent-invoke</text><text x="95.0" y="278.0" text-anchor="middle" class="s">Lambda</text>
 <rect x="230" y="225.0" width="210" height="80" rx="6" class="ai"/><text x="335.0" y="262.0" text-anchor="middle" class="t">AgentCore Runtime</text><text x="335.0" y="278.0" text-anchor="middle" class="s">LangGraph create_agent loop</text>
 <path class="l" d="M170 265.0 C210 265.0 190 265.0 230 265.0"/>
+<rect x="20" y="325.0" width="150" height="46" rx="6" class="lam"/><text x="95.0" y="345.0" text-anchor="middle" class="t">agent-mcp</text><text x="95.0" y="361.0" text-anchor="middle" class="s">Lambda: /agent/mcp</text>
+<rect x="20" y="390.0" width="150" height="46" rx="6" class="box"/><text x="95.0" y="410.0" text-anchor="middle" class="t">External MCP client</text><text x="95.0" y="426.0" text-anchor="middle" class="s">inbound (we are server)</text>
+<path class="l" d="M95 390.0 C135 390.0 55 371.0 95 371.0"/>
+<path class="l" d="M170 348.0 C210 348.0 190 285.0 230 285.0"/>
 <text x="520" y="84" class="c">Models &amp; safety</text>
 <text x="760" y="84" class="c">Tools</text>
 <text x="990" y="84" class="c">Tool backends</text>
@@ -29,7 +33,7 @@
 <path class="l" d="M440 265.0 C480 265.0 480 419 520 419"/>
 <rect x="990" y="100" width="190" height="46" rx="6" class="ai"/><text x="1085.0" y="120.0" text-anchor="middle" class="t">Code Interpreter</text><text x="1085.0" y="136.0" text-anchor="middle" class="s">isolated sandbox</text>
 <rect x="990" y="174" width="190" height="46" rx="6" class="ai"/><text x="1085.0" y="194.0" text-anchor="middle" class="t">AgentCore Browser</text><text x="1085.0" y="210.0" text-anchor="middle" class="s">sandboxed browsing</text>
-<rect x="990" y="248" width="190" height="46" rx="6" class="ai"/><text x="1085.0" y="268.0" text-anchor="middle" class="t">AgentCore Gateway</text><text x="1085.0" y="284.0" text-anchor="middle" class="s">MCP -&gt; Lambda</text>
+<rect x="990" y="248" width="190" height="46" rx="6" class="ai"/><text x="1085.0" y="268.0" text-anchor="middle" class="t">AgentCore Gateway (MCP)</text><text x="1085.0" y="284.0" text-anchor="middle" class="s">MCP server -&gt; Lambda</text>
 <rect x="760" y="100" width="200" height="46" rx="6" class="lam"/><text x="860.0" y="120.0" text-anchor="middle" class="t">run_python</text><text x="860.0" y="136.0" text-anchor="middle" class="s">tool</text>
 <path class="l" d="M440 265.0 C600.0 265.0 600.0 123 760 123"/>
 <path class="l" d="M960 123 C1000 123 950 123 990 123"/>

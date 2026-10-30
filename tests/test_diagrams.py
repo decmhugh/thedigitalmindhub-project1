@@ -31,5 +31,13 @@ def test_lambda_endpoints_come_from_terraform(tmp_path):
         assert name in infra
 
 
+def test_sequence_diagram_covers_input_to_model(tmp_path):
+    generate(tmp_path)
+    sequence = (tmp_path / "sequence.svg").read_text(encoding="utf-8")
+    ET.fromstring(sequence)
+    for text in ("POST /agent/invoke", "validate auth_session", "InvokeAgentRuntime", "Converse", "run_python", "browse_page", "say_hello", "Guardrail"):
+        assert text in sequence
+
+
 def test_deploy_script_generates_diagrams():
     assert "gen_diagrams.py" in (ROOT / "deploy.ps1").read_text(encoding="utf-8")
