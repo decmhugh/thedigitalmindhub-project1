@@ -26,6 +26,16 @@ data "aws_iam_policy_document" "agent_mcp" {
   source_policy_documents = [data.aws_iam_policy_document.agent_invoke.json]
 
   statement {
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:${data.aws_partition.current.partition}:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.agent_ssm_name}"]
+  }
+
+  statement {
+    actions   = ["bedrock-agentcore:InvokeAgentRuntime"]
+    resources = [local.agent_runtime_arn, "${local.agent_runtime_arn}/runtime-endpoint/*"]
+  }
+
+  statement {
     actions = [
       "dynamodb:DeleteItem",
       "dynamodb:GetItem",
