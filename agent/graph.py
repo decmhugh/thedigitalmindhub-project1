@@ -1,3 +1,4 @@
+import re
 import uuid
 from typing import Any
 
@@ -58,6 +59,18 @@ def build_agent(model: Any, tools: list, checkpointer: Any = None):
                         middleware=[_UniqueDocumentNames()])
 
 
+DOCUMENT_NAME_DISALLOWED = re.compile(r"[^A-Za-z0-9 \-()\[\]]+")
+DOCUMENT_NAME_MAX = 40
+
+
+def _document_name(original: Any) -> str:
+    """Bedrock allows only alphanumerics, single spaces, hyphens, parentheses and brackets, and names must be unique."""
+    stem = original.rsplit(".", 1)[0] if isinstance(original, str) and "." in original.strip(".") else original
+    base = DOCUMENT_NAME_DISALLOWED.sub("-", stem) if isinstance(stem, str) else ""
+    base = re.sub(r"\s+", " ", base).strip(" -")[:DOCUMENT_NAME_MAX].strip(" -") or "document"
+    return f"{base}-{uuid.uuid4().hex[:8]}"
+
+
 def _attachment_block(attachment: Any, kind: str | None) -> dict[str, Any]:
     media_type = attachment.get("mediaType") if isinstance(attachment, dict) else None
     data = attachment.get("data") if isinstance(attachment, dict) else None
@@ -66,9 +79,7 @@ def _attachment_block(attachment: Any, kind: str | None) -> dict[str, Any]:
     if media_type in IMAGE_MEDIA_TYPES and kind in (None, "image"):
         return {"type": "image", "base64": data, "mime_type": media_type}
     if media_type in DOCUMENT_MEDIA_TYPES and kind in (None, "document"):
-        # Bedrock rejects repeated document names in one conversation, and memory replays earlier turns.
-        # The name stays neutral and unique so user-supplied filenames never reach the model.
-        return {"type": "file", "base64": data, "mime_type": media_type, "name": f"document-{uuid.uuid4().hex[:8]}"}
+        return {"type": "file", "base64": data, "mime_type": media_type, "name": _document_name(attachment.get("name"))}
     raise ValueError("attachment must include a supported mediaType")
 
 

@@ -290,6 +290,17 @@ def test_documents_are_forwarded_as_document_kind(monkeypatch):
     assert payload["file"]["mediaType"] == "application/pdf"
 
 
+def test_original_filename_is_forwarded_truncated_when_provided(monkeypatch):
+    monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")
+    runtime, client_patch = configure_clients(monkeypatch)
+    body = json.dumps({"prompt": "x", "file": {"key": KEY, "name": "Report " + "a" * 300 + ".pdf"}})
+    with client_patch:
+        handler.lambda_handler(api_event(body), None)
+
+    payload = json.loads(runtime.invoke_agent_runtime.call_args.kwargs["payload"])
+    assert payload["file"]["name"].startswith("Report ") and len(payload["file"]["name"]) == 100
+
+
 @pytest.mark.parametrize("prompt", ["", "  ", None])
 def test_file_without_prompt_uses_default_prompt(monkeypatch, prompt):
     monkeypatch.setenv("UPLOAD_BUCKET", "test-uploads")

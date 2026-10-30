@@ -42,6 +42,7 @@ Flow: browser/client requests an upload URL, POSTs the file directly to S3, then
 - AC8: The bucket is private (block public access, encryption at rest, TLS-only), has CORS for the site origin only, and a lifecycle rule deleting objects after 7 days.
 - AC9: Logs contain no file contents, filenames, prompts, or raw session/user identifiers.
 - AC10: Existing rate limits, sign-in requirements, and error codes are preserved; the new endpoint uses the same throttle (2 rps, burst 5).
+- AC11: Documents are named for the model as `<sanitised original name>-<8 hex>` (alphanumerics, spaces, hyphens, brackets only; extension dropped; max 40 chars before the suffix; `document` if nothing safe remains), so names are unique per upload. The browser sends the original name with the invoke request; it is never logged and never used in S3 keys. Duplicate names in replayed memory are renamed before each model call.
 
 ## Non-functional
 

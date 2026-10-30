@@ -283,7 +283,7 @@
 
       function uploadFile(file, mediaType) {
         const isImage = fileTypes[mediaType];
-        attachedFile = { key: null, mediaType: mediaType, previewUrl: isImage ? URL.createObjectURL(file) : null };
+        attachedFile = { key: null, name: file.name, mediaType: mediaType, previewUrl: isImage ? URL.createObjectURL(file) : null };
         $("#image-thumb").prop("hidden", !isImage);
         if (isImage) $("#image-thumb").attr("src", attachedFile.previewUrl);
         $("#file-name").text(isImage ? "" : file.name);
@@ -378,7 +378,7 @@
         $("#send-button").prop("disabled", true).text("…");
         const payload = {};
         if (prompt) payload.prompt = prompt;
-        if (file) payload.file = { key: file.key };
+        if (file) payload.file = { key: file.key, name: file.name };
         if (startNewSession) payload.new_session = true;
         $.ajax({
           url: "/agent/invoke",

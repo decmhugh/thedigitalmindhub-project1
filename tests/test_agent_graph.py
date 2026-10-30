@@ -162,6 +162,26 @@ def test_document_file_builds_named_file_block(media_type):
     assert re.fullmatch(r"document-[0-9a-f]{8}", file_block["name"])
 
 
+@pytest.mark.parametrize("original,expected", [
+    ("Quarterly Report.pdf", r"Quarterly Report-[0-9a-f]{8}"),
+    ("../../etc/passwd; rm -rf.txt", r"etc-passwd- rm -rf-[0-9a-f]{8}|[A-Za-z0-9 \-]+-[0-9a-f]{8}"),
+    ("日本語.pdf", r"document-[0-9a-f]{8}"),
+    (None, r"document-[0-9a-f]{8}"),
+    ("a" * 200 + ".pdf", r"a{40}-[0-9a-f]{8}"),
+])
+def test_document_name_keeps_safe_original_name_plus_unique_suffix(original, expected):
+    agent = Mock()
+    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("ok")]})
+    file = {"mediaType": "application/pdf", "data": "aGVsbG8=", "kind": "document"}
+    if original is not None:
+        file["name"] = original
+    asyncio.run(_handle_request(agent, {"prompt": "x", "file": file}, "s"))
+
+    name = agent.ainvoke.call_args.args[0]["messages"][0][1][1]["name"]
+    assert re.fullmatch(expected, name)
+    assert re.fullmatch(r"[A-Za-z0-9 \-()\[\]]+", name) and "  " not in name
+
+
 def test_each_document_gets_a_unique_name():
     names = set()
     for _ in range(20):

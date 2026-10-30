@@ -67,7 +67,12 @@ def _load_file(file: Any, user: str) -> dict[str, str]:
     data = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
     if not data:
         raise FileRejected(400, "A valid file is required")
-    return {"mediaType": media_type, "data": base64.b64encode(data).decode("ascii"), "kind": kind}
+    return {"mediaType": media_type, "data": base64.b64encode(data).decode("ascii"), "kind": kind, **_name_field(file)}
+
+
+def _name_field(file: Any) -> dict[str, str]:
+    name = file.get("name") if isinstance(file, dict) else None
+    return {"name": name[:100]} if isinstance(name, str) and name.strip() else {}
 
 
 def _response(status_code: int, body: dict[str, Any], cookies: list[str] | None = None) -> dict[str, Any]:
