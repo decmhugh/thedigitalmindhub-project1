@@ -61,7 +61,23 @@ resource "aws_lambda_function" "this" {
   depends_on = [aws_cloudwatch_log_group.this]
 }
 
+moved {
+  from = aws_apigatewayv2_integration.this
+  to   = aws_apigatewayv2_integration.this[0]
+}
+
+moved {
+  from = aws_apigatewayv2_route.this
+  to   = aws_apigatewayv2_route.this[0]
+}
+
+moved {
+  from = aws_lambda_permission.apigw
+  to   = aws_lambda_permission.apigw[0]
+}
+
 resource "aws_apigatewayv2_integration" "this" {
+  count                  = var.route_key == null ? 0 : 1
   api_id                 = var.api_id
   integration_type       = "AWS_PROXY"
   integration_uri        = aws_lambda_function.this.invoke_arn
@@ -69,12 +85,14 @@ resource "aws_apigatewayv2_integration" "this" {
 }
 
 resource "aws_apigatewayv2_route" "this" {
+  count     = var.route_key == null ? 0 : 1
   api_id    = var.api_id
   route_key = var.route_key
-  target    = "integrations/${aws_apigatewayv2_integration.this.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.this[0].id}"
 }
 
 resource "aws_lambda_permission" "apigw" {
+  count         = var.route_key == null ? 0 : 1
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.this.function_name

@@ -7,15 +7,19 @@ variable "source_dir" {
 }
 
 variable "route_key" {
-  type = string
+  type        = string
+  default     = null
+  description = "API Gateway route key. Null creates a Lambda with no public route (internal worker)."
 }
 
 variable "api_id" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "api_exec_arn" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "environment" {
