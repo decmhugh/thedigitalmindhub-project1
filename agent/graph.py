@@ -2,6 +2,7 @@ import uuid
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langgraph.checkpoint.memory import MemorySaver
 
 SYSTEM_PROMPT = (
@@ -21,8 +22,40 @@ DOCUMENT_MEDIA_TYPES = {
 }
 
 
+class _UniqueDocumentNames(AgentMiddleware):
+    """Bedrock rejects repeated document names; history stored by older versions used one fixed name."""
+
+    @staticmethod
+    def _dedupe(messages: list) -> list:
+        seen: set[str] = set()
+        out = []
+        for message in messages:
+            content = getattr(message, "content", None)
+            if not isinstance(content, list):
+                out.append(message)
+                continue
+            blocks = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "file":
+                    name = str(block.get("name") or "document")
+                    while name in seen:
+                        name = f"document-{uuid.uuid4().hex[:8]}"
+                    seen.add(name)
+                    block = {**block, "name": name}
+                blocks.append(block)
+            out.append(message.model_copy(update={"content": blocks}))
+        return out
+
+    def wrap_model_call(self, request, handler):
+        return handler(request.override(messages=self._dedupe(request.messages)))
+
+    async def awrap_model_call(self, request, handler):
+        return await handler(request.override(messages=self._dedupe(request.messages)))
+
+
 def build_agent(model: Any, tools: list, checkpointer: Any = None):
-    return create_agent(model, tools, system_prompt=SYSTEM_PROMPT, checkpointer=checkpointer or MemorySaver())
+    return create_agent(model, tools, system_prompt=SYSTEM_PROMPT, checkpointer=checkpointer or MemorySaver(),
+                        middleware=[_UniqueDocumentNames()])
 
 
 def _attachment_block(attachment: Any, kind: str | None) -> dict[str, Any]:

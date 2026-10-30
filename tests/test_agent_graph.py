@@ -174,6 +174,19 @@ def test_each_document_gets_a_unique_name():
     assert len(names) == 20
 
 
+def test_replayed_history_with_duplicate_document_names_is_renamed_before_model_call():
+    agent, model = make_agent([AIMessage("ok")])
+    old = {"type": "file", "base64": "aGVsbG8=", "mime_type": "application/pdf", "name": "document"}
+    history = [("user", [{"type": "text", "text": "a"}, dict(old)]), ("assistant", "done"),
+               ("user", [{"type": "text", "text": "b"}, dict(old)])]
+
+    asyncio.run(agent.ainvoke({"messages": history}, config={"configurable": {"thread_id": "t"}}))
+
+    sent = " ".join(model.calls[0])
+    names = re.findall(r"'name': '([^']+)'", sent)
+    assert len(names) == 2 and len(set(names)) == 2
+
+
 def test_image_file_builds_image_block():
     agent = Mock()
     agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("a cat")]})

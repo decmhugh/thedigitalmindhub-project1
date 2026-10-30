@@ -102,8 +102,13 @@ foreach ($file in Get-ChildItem -Path $sourceDirectory -Filter "*.html" -File) {
 }
 
 Step "Enable X-Ray Transaction Search (idempotent)"
-aws xray update-trace-segment-destination --destination CloudWatchLogs --region $Region | Out-Null
-Check "update-trace-segment-destination"
+$destination = aws xray get-trace-segment-destination --region $Region --query Destination --output text 2>$null
+if ($destination -eq "CloudWatchLogs") {
+    Write-Host "Already enabled (destination is CloudWatchLogs)."
+} else {
+    aws xray update-trace-segment-destination --destination CloudWatchLogs --region $Region | Out-Null
+    Check "update-trace-segment-destination"
+}
 
 if ($RunEvals) {
     Step "Run agent evals"
