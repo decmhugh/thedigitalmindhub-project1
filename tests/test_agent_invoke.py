@@ -186,6 +186,25 @@ def test_failure_logs_error_type_and_code_but_not_message_or_prompt(monkeypatch,
     assert SESSION not in caplog.text
 
 
+def test_runtime_error_log_has_http_status_request_id_and_hint(monkeypatch, caplog):
+    error = ClientError(
+        {
+            "Error": {"Code": "RuntimeClientError", "Message": "secret details"},
+            "ResponseMetadata": {"HTTPStatusCode": 424, "RequestId": "req-123"},
+        },
+        "InvokeAgentRuntime",
+    )
+    _, client_patch = configure_clients(monkeypatch, runtime_error=error)
+    with client_patch, caplog.at_level("INFO"):
+        handler.lambda_handler(api_event('{"prompt":"secret prompt"}', f"agent_session={SESSION}"), None)
+
+    assert '"http_status": 424' in caplog.text
+    assert '"request_id": "req-123"' in caplog.text
+    assert "/aws/bedrock-agentcore/runtimes/" in caplog.text
+    assert "secret details" not in caplog.text
+    assert "secret prompt" not in caplog.text
+
+
 def test_missing_configuration_is_logged_as_error_type(monkeypatch, caplog):
     monkeypatch.delenv("AGENT_RUNTIME_ARN_PARAM", raising=False)
     _, client_patch = configure_clients(monkeypatch)

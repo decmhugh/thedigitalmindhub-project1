@@ -164,6 +164,11 @@ def _log(session_id: str, status: int, started: float, error: Exception | None =
         entry["error_type"] = type(error).__name__
         if isinstance(error, ClientError):
             entry["error_code"] = error.response.get("Error", {}).get("Code", "")
+            metadata = error.response.get("ResponseMetadata", {})
+            entry["http_status"] = metadata.get("HTTPStatusCode")
+            entry["request_id"] = metadata.get("RequestId")
+            if entry["error_code"] == "RuntimeClientError":
+                entry["hint"] = "Agent container raised an error; see log group /aws/bedrock-agentcore/runtimes/"
     logger.info(json.dumps(entry))
 
 
