@@ -23,8 +23,40 @@ DOCUMENT_MEDIA_TYPES = {
 }
 
 
+_ATTACHMENTS: dict[str, dict[str, Any]] = {}
+_PLACEHOLDER = re.compile(r"^\[\[attachment:([0-9a-f]{32})\]\]$")
+GONE_TEXT = "[an earlier attachment is no longer available]"
+
+
+def _stash(content: Any) -> tuple[Any, list[str]]:
+    """Keep attachment bytes out of graph state: AgentCore Memory rejects checkpoint events this large (413)."""
+    if not isinstance(content, list):
+        return content, []
+    ids, out = [], []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") in ("image", "file"):
+            ref = uuid.uuid4().hex
+            _ATTACHMENTS[ref] = block
+            ids.append(ref)
+            block = {"type": "text", "text": f"[[attachment:{ref}]]"}
+        out.append(block)
+    return out, ids
+
+
+def resolve_attachments(content: Any) -> Any:
+    if not isinstance(content, list):
+        return content
+    out = []
+    for block in content:
+        match = _PLACEHOLDER.match(block.get("text", "")) if isinstance(block, dict) and block.get("type") == "text" else None
+        if match:
+            block = _ATTACHMENTS.get(match.group(1)) or {"type": "text", "text": GONE_TEXT}
+        out.append(block)
+    return out
+
+
 class _UniqueDocumentNames(AgentMiddleware):
-    """Bedrock rejects repeated document names; history stored by older versions used one fixed name."""
+    """Swaps attachment placeholders back to real blocks per model call; Bedrock also rejects repeated document names."""
 
     @staticmethod
     def _dedupe(messages: list) -> list:
@@ -36,7 +68,7 @@ class _UniqueDocumentNames(AgentMiddleware):
                 out.append(message)
                 continue
             blocks = []
-            for block in content:
+            for block in resolve_attachments(content):
                 if isinstance(block, dict) and block.get("type") == "file":
                     name = str(block.get("name") or "document")
                     while name in seen:
@@ -104,12 +136,17 @@ async def handle_request(agent: Any, payload: Any, session_id: str) -> dict[str,
         raise ValueError("prompt must be a non-empty string")
 
     content = _user_content(prompt, payload)
+    content, attachment_ids = _stash(content)
 
     # Anonymous callers share one actor id; isolation comes from the per-session thread id.
-    result = await agent.ainvoke(
-        {"messages": [("user", content)]},
-        config={"configurable": {"thread_id": session_id, "actor_id": ANONYMOUS_ACTOR}},
-    )
+    try:
+        result = await agent.ainvoke(
+            {"messages": [("user", content)]},
+            config={"configurable": {"thread_id": session_id, "actor_id": ANONYMOUS_ACTOR}},
+        )
+    finally:
+        for ref in attachment_ids:
+            _ATTACHMENTS.pop(ref, None)
     last = result["messages"][-1]
     response: dict[str, Any] = {"response": _text(last.content)}
     if last.response_metadata.get("stopReason") == "guardrail_intervened":

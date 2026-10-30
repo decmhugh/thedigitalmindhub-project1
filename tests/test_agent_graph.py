@@ -10,6 +10,7 @@ from pydantic import Field
 
 from agent.graph import build_agent
 from agent.graph import handle_request as _handle_request
+from agent.graph import resolve_attachments
 from agent.tools import make_code_tool
 
 
@@ -32,6 +33,18 @@ class ScriptedModel(BaseChatModel):
         self.calls.append([str(m.content) for m in messages])
         reply = self.replies[len(self.calls) - 1]
         return ChatResult(generations=[ChatGeneration(message=reply)])
+
+
+def capturing_agent(reply='ok'):
+    agent = Mock()
+    agent.sent = []
+
+    async def ainvoke(state, config=None):
+        agent.sent.append(resolve_attachments(state['messages'][0][1]))
+        return {'messages': [AIMessage(reply)]}
+
+    agent.ainvoke = AsyncMock(side_effect=ainvoke)
+    return agent
 
 
 def interpreter_returning(text):
@@ -114,16 +127,13 @@ def test_guardrail_intervention_is_flagged_as_blocked():
 
 
 def test_image_payload_builds_multimodal_message():
-    agent = Mock()
-    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("a cat")]})
+    agent = capturing_agent("a cat")
     payload = {"prompt": "What is this?", "image": {"mediaType": "image/png", "data": "aGVsbG8="}}
 
     result = asyncio.run(_handle_request(agent, payload, "session-a"))
 
     assert result == {"response": "a cat"}
-    message = agent.ainvoke.call_args.args[0]["messages"][0]
-    assert message[0] == "user"
-    assert message[1] == [
+    assert agent.sent[0] == [
         {"type": "text", "text": "What is this?"},
         {"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"},
     ]
@@ -147,14 +157,12 @@ DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 @pytest.mark.parametrize("media_type", ["application/pdf", "text/plain", "text/csv", DOCX])
 def test_document_file_builds_named_file_block(media_type):
-    agent = Mock()
-    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("summary")]})
+    agent = capturing_agent("summary")
     payload = {"prompt": "Summarise", "file": {"mediaType": media_type, "data": "aGVsbG8=", "kind": "document"}}
 
     asyncio.run(_handle_request(agent, payload, "session-a"))
 
-    message = agent.ainvoke.call_args.args[0]["messages"][0]
-    text_block, file_block = message[1]
+    text_block, file_block = agent.sent[0]
     assert text_block == {"type": "text", "text": "Summarise"}
     assert file_block["type"] == "file"
     assert file_block["base64"] == "aGVsbG8="
@@ -170,14 +178,13 @@ def test_document_file_builds_named_file_block(media_type):
     ("a" * 200 + ".pdf", r"a{40}-[0-9a-f]{8}"),
 ])
 def test_document_name_keeps_safe_original_name_plus_unique_suffix(original, expected):
-    agent = Mock()
-    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("ok")]})
+    agent = capturing_agent()
     file = {"mediaType": "application/pdf", "data": "aGVsbG8=", "kind": "document"}
     if original is not None:
         file["name"] = original
     asyncio.run(_handle_request(agent, {"prompt": "x", "file": file}, "s"))
 
-    name = agent.ainvoke.call_args.args[0]["messages"][0][1][1]["name"]
+    name = agent.sent[0][1]["name"]
     assert re.fullmatch(expected, name)
     assert re.fullmatch(r"[A-Za-z0-9 \-()\[\]]+", name) and "  " not in name
 
@@ -185,11 +192,10 @@ def test_document_name_keeps_safe_original_name_plus_unique_suffix(original, exp
 def test_each_document_gets_a_unique_name():
     names = set()
     for _ in range(20):
-        agent = Mock()
-        agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("summary")]})
+        agent = capturing_agent("summary")
         payload = {"prompt": "Summarise", "file": {"mediaType": "application/pdf", "data": "aGVsbG8=", "kind": "document"}}
         asyncio.run(_handle_request(agent, payload, "session-a"))
-        names.add(agent.ainvoke.call_args.args[0]["messages"][0][1][1]["name"])
+        names.add(agent.sent[0][1]["name"])
 
     assert len(names) == 20
 
@@ -207,14 +213,28 @@ def test_replayed_history_with_duplicate_document_names_is_renamed_before_model_
     assert len(names) == 2 and len(set(names)) == 2
 
 
+def test_attachment_bytes_never_reach_graph_state_but_reach_the_model():
+    from langgraph.checkpoint.memory import MemorySaver
+
+    saver = MemorySaver()
+    model = ScriptedModel(replies=[AIMessage("a cat")])
+    agent = build_agent(model, [], saver)
+    payload = {"prompt": "What is this?", "image": {"mediaType": "image/png", "data": "QUJDREVGRw=="}}
+
+    asyncio.run(_handle_request(agent, payload, "s1"))
+
+    assert "QUJDREVGRw==" in " ".join(model.calls[0])
+    stored = str(saver.get_tuple({"configurable": {"thread_id": "s1"}}).checkpoint)
+    assert "QUJDREVGRw==" not in stored
+
+
 def test_image_file_builds_image_block():
-    agent = Mock()
-    agent.ainvoke = AsyncMock(return_value={"messages": [AIMessage("a cat")]})
+    agent = capturing_agent("a cat")
     payload = {"prompt": "?", "file": {"mediaType": "image/png", "data": "aGVsbG8=", "kind": "image"}}
 
     asyncio.run(_handle_request(agent, payload, "session-a"))
 
-    block = agent.ainvoke.call_args.args[0]["messages"][0][1][1]
+    block = agent.sent[0][1]
     assert block == {"type": "image", "base64": "aGVsbG8=", "mime_type": "image/png"}
 
 
