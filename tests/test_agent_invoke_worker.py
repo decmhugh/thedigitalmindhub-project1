@@ -197,6 +197,17 @@ def test_handler_marks_done_stores_response_and_clears_lock(monkeypatch):
     assert runtime.ddb.delete_item.call_args.kwargs["Key"] == {"pk": {"S": "LOCK#x"}}
 
 
+def test_result_update_aliases_reserved_words(monkeypatch):
+    runtime, patched = configure(monkeypatch)
+    with patched:
+        handler.lambda_handler(job(), None)
+
+    last = updates(runtime.ddb)[-1]
+    assert last["ExpressionAttributeNames"]["#r"] == "response"
+    assert " response " not in last["UpdateExpression"]
+    assert last["UpdateExpression"].count("#") >= 5
+
+
 def test_handler_marks_blocked_done_without_text_and_failures_failed(monkeypatch):
     blocked = {"response": io.BytesIO(b'{"response":"policy text","blocked":true}')}
     runtime, patched = configure(monkeypatch, runtime_response=blocked)

@@ -168,18 +168,23 @@ def _finish(job: dict[str, Any], status: int, body: dict[str, Any]) -> None:
         values[":status"] = {"S": "done"}
         values[":response"] = {"S": body["response"]}
         values[":blocked"] = {"BOOL": False}
-        expression = "SET #s = :status, response = :response, blocked = :blocked, http_status = :http, expires_at = :expires"
+        expression = "SET #s = :status, #r = :response, #b = :blocked, #h = :http, #x = :expires"
     elif status == 422:
         values[":status"] = {"S": "done"}
         values[":blocked"] = {"BOOL": True}
-        expression = "SET #s = :status, blocked = :blocked, http_status = :http, expires_at = :expires"
+        expression = "SET #s = :status, #b = :blocked, #h = :http, #x = :expires"
     else:
         values[":status"] = {"S": "failed"}
         values[":error"] = {"S": body["error"]}
-        expression = "SET #s = :status, #e = :error, http_status = :http, expires_at = :expires"
-    names = {"#s": "status"}
+        expression = "SET #s = :status, #e = :error, #h = :http, #x = :expires"
+    # Alias every name: "response", "status" and others are DynamoDB reserved words.
+    names = {"#s": "status", "#h": "http_status", "#x": "expires_at"}
     if ":error" in values:
         names["#e"] = "error"
+    if ":response" in values:
+        names["#r"] = "response"
+    if ":blocked" in values:
+        names["#b"] = "blocked"
     ddb.update_item(
         TableName=table,
         Key={"pk": {"S": "JOB#" + job["job_id"]}},
