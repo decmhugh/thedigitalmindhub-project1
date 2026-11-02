@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" role="img" aria-labelledby="title description" font-family="Segoe UI, Arial, sans-serif">
+  <title id="title">MCP client and server architecture</title>
+  <desc id="description">An MCP client communicates over Streamable HTTP with an API Gateway and Lambda server. The server stores isolated sessions in DynamoDB, invokes the AgentCore runtime, and uses S3 for uploaded files.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#43536b"/>
+    </marker>
+    <marker id="return-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#16845b"/>
+    </marker>
+    <style>
+      .bg{fill:#f6f8fb}
+      .panel{fill:#fff;stroke:#d9e0ea;stroke-width:1.5}
+      .client{fill:#edf4ff;stroke:#3973c6;stroke-width:1.5}
+      .server{fill:#fff3e4;stroke:#d78316;stroke-width:1.5}
+      .data{fill:#eaf6ed;stroke:#388650;stroke-width:1.5}
+      .ai{fill:#f3ecfb;stroke:#8050aa;stroke-width:1.5}
+      .edge{fill:#eaf0f8;stroke:#506988;stroke-width:1.5}
+      .title{fill:#1e2b3c;font-size:25px;font-weight:700}
+      .subtitle{fill:#59687a;font-size:13px}
+      .lane{fill:#27384d;font-size:16px;font-weight:700}
+      .label{fill:#223247;font-size:14px;font-weight:700}
+      .body{fill:#34455c;font-size:12px}
+      .small{fill:#59687a;font-size:11px}
+      .num{fill:#fff;font-size:12px;font-weight:700;text-anchor:middle}
+      .flow{fill:none;stroke:#43536b;stroke-width:2;marker-end:url(#arrow)}
+      .back{fill:none;stroke:#16845b;stroke-width:2;stroke-dasharray:6 4;marker-end:url(#return-arrow)}
+      .divider{stroke:#d9e0ea;stroke-width:1}
+      .step{fill:#43536b}
+      .tag{fill:#edf1f6;stroke:#d9e0ea;stroke-width:1}
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="900"/>
+  <text x="40" y="48" class="title">MCP client ↔ server</text>
+  <text x="40" y="72" class="subtitle">Streamable HTTP · JSON-RPC 2.0 · project agent MCP endpoint</text>
+
+  <rect x="35" y="100" width="350" height="535" rx="14" class="panel"/>
+  <rect x="405" y="100" width="490" height="535" rx="14" class="panel"/>
+  <rect x="915" y="100" width="490" height="535" rx="14" class="panel"/>
+  <text x="55" y="130" class="lane">MCP CLIENT</text>
+  <text x="425" y="130" class="lane">MCP SERVER · AWS</text>
+  <text x="935" y="130" class="lane">AGENT RUNTIME</text>
+
+  <rect x="60" y="160" width="300" height="100" rx="9" class="client"/>
+  <text x="80" y="188" class="label">MCP host application</text>
+  <text x="80" y="211" class="body">Claude · IDE · custom MCP client</text>
+  <text x="80" y="234" class="small">Maintains the MCP-Session-Id per conversation</text>
+
+  <rect x="60" y="300" width="300" height="145" rx="9" class="client"/>
+  <text x="80" y="328" class="label">MCP protocol client</text>
+  <text x="80" y="353" class="body">initialize → initialized</text>
+  <text x="80" y="375" class="body">tools/list → discover available tools</text>
+  <text x="80" y="397" class="body">tools/call → send tool name and arguments</text>
+  <text x="80" y="423" class="small">POST /agent/mcp · application/json</text>
+
+  <rect x="60" y="478" width="300" height="115" rx="9" class="client"/>
+  <text x="80" y="506" class="label">Available tools</text>
+  <text x="80" y="531" class="body">ask_agent · read_image</text>
+  <text x="80" y="552" class="body">get_upload_url · read_file</text>
+  <text x="80" y="575" class="small">Image input can be sent inline as base64.</text>
+
+  <rect x="430" y="160" width="185" height="92" rx="9" class="edge"/>
+  <text x="522" y="188" class="label" text-anchor="middle">API Gateway</text>
+  <text x="522" y="211" class="body" text-anchor="middle">HTTP API</text>
+  <text x="522" y="233" class="small" text-anchor="middle">ANY /agent/mcp</text>
+
+  <rect x="660" y="155" width="205" height="220" rx="9" class="server"/>
+  <text x="762" y="184" class="label" text-anchor="middle">agent_mcp Lambda</text>
+  <line x1="678" y1="199" x2="847" y2="199" class="divider"/>
+  <text x="680" y="224" class="body">JSON-RPC protocol</text>
+  <text x="680" y="247" class="body">Session validation / renewal</text>
+  <text x="680" y="270" class="body">Tool discovery and dispatch</text>
+  <text x="680" y="293" class="body">Argument and file checks</text>
+  <text x="680" y="328" class="small">GET: 405 · DELETE: end session</text>
+  <text x="680" y="349" class="small">Logs hashed correlation IDs only</text>
+
+  <rect x="430" y="420" width="205" height="92" rx="9" class="data"/>
+  <text x="532" y="449" class="label" text-anchor="middle">DynamoDB</text>
+  <text x="532" y="472" class="body" text-anchor="middle">MCP session records</text>
+  <text x="532" y="494" class="small" text-anchor="middle">Isolated runtime session · 24h TTL</text>
+
+  <rect x="660" y="420" width="205" height="92" rx="9" class="data"/>
+  <text x="762" y="449" class="label" text-anchor="middle">S3 agent_uploads</text>
+  <text x="762" y="472" class="body" text-anchor="middle">Presigned file upload</text>
+  <text x="762" y="494" class="small" text-anchor="middle">Owner-scoped object key</text>
+
+  <rect x="945" y="165" width="430" height="112" rx="9" class="ai"/>
+  <text x="1160" y="194" class="label" text-anchor="middle">Bedrock AgentCore Runtime</text>
+  <text x="1160" y="218" class="body" text-anchor="middle">Existing project agent · session-aware conversation</text>
+  <text x="1160" y="242" class="body" text-anchor="middle">Text prompts and image / document inputs</text>
+  <text x="1160" y="263" class="small" text-anchor="middle">Runtime session ID is mapped from the MCP session</text>
+
+  <rect x="965" y="325" width="185" height="95" rx="9" class="ai"/>
+  <text x="1057" y="354" class="label" text-anchor="middle">Text model</text>
+  <text x="1057" y="377" class="body" text-anchor="middle">Nova Pro</text>
+  <text x="1057" y="400" class="small" text-anchor="middle">Guardrail applied</text>
+  <rect x="1170" y="325" width="185" height="95" rx="9" class="ai"/>
+  <text x="1262" y="354" class="label" text-anchor="middle">Vision model</text>
+  <text x="1262" y="377" class="body" text-anchor="middle">Nova Lite</text>
+  <text x="1262" y="400" class="small" text-anchor="middle">Images / documents</text>
+
+  <rect x="945" y="465" width="430" height="100" rx="9" class="ai"/>
+  <text x="1160" y="495" class="label" text-anchor="middle">Agent tools and safety</text>
+  <text x="1160" y="520" class="body" text-anchor="middle">Code Interpreter · Browser · AgentCore Gateway</text>
+  <text x="1160" y="544" class="small" text-anchor="middle">Guardrail blocks are returned as blocked tool results</text>
+
+  <path d="M360 350H430" class="flow"/>
+  <text x="394" y="337" class="small" text-anchor="middle">HTTPS</text>
+  <path d="M615 206H660" class="flow"/>
+  <path d="M660 232H615" class="back"/>
+  <path d="M762 375V420" class="flow"/>
+  <path d="M705 375V402H532V420" class="flow"/>
+  <path d="M865 265H945" class="flow"/>
+  <text x="905" y="250" class="small" text-anchor="middle">Invoke</text>
+  <path d="M945 285H865" class="back"/>
+  <text x="905" y="302" class="small" text-anchor="middle">result</text>
+  <path d="M1160 277V325" class="flow"/>
+  <path d="M1057 420V465" class="flow"/>
+  <path d="M1262 420V465" class="flow"/>
+
+  <rect x="35" y="665" width="1370" height="195" rx="14" class="panel"/>
+  <text x="55" y="697" class="lane">TYPICAL SESSION AND FILE FLOW</text>
+
+  <circle cx="75" cy="739" r="13" class="step"/><text x="75" y="743" class="num">1</text>
+  <text x="99" y="735" class="label">Initialize</text>
+  <text x="99" y="756" class="small">Server returns negotiated version and MCP-Session-Id.</text>
+  <path d="M365 740H410" class="flow"/>
+
+  <circle cx="440" cy="739" r="13" class="step"/><text x="440" y="743" class="num">2</text>
+  <text x="464" y="735" class="label">Discover</text>
+  <text x="464" y="756" class="small">tools/list returns the four supported tools.</text>
+  <path d="M715 740H760" class="flow"/>
+
+  <circle cx="790" cy="739" r="13" class="step"/><text x="790" y="743" class="num">3</text>
+  <text x="814" y="735" class="label">Call</text>
+  <text x="814" y="756" class="small">tools/call invokes the selected operation.</text>
+  <path d="M1050 740H1095" class="flow"/>
+
+  <circle cx="1125" cy="739" r="13" class="step"/><text x="1125" y="743" class="num">4</text>
+  <text x="1149" y="735" class="label">Respond</text>
+  <text x="1149" y="756" class="small">MCP result returns to the client.</text>
+
+  <line x1="55" y1="782" x2="1385" y2="782" class="divider"/>
+  <text x="65" y="810" class="body">For files: get_upload_url → client uploads directly to S3 → read_file passes the returned key to the agent.</text>
+  <text x="65" y="835" class="small">Solid arrows = request / processing · dashed green arrows = response · inactive sessions expire after 24 hours.</text>
+</svg>
